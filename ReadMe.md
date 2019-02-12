@@ -144,7 +144,7 @@ $ python setup.py install
 
 ### Examples
 
-* See the `example` directory. The examples therein *(to be added soon)* require `MDAnalysis`, which can be installed as `pip install mdanalysis`.
+* See the `example` directory.
 
 ### License
 

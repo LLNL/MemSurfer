@@ -277,7 +277,7 @@ class TriMesh(object):
         d = np.asarray(d, dtype=np.float32)
 
         if normalize:
-            d = d * (1.0/float(cnt))
+            d *= (1.0/float(cnt))
 
         mtimer.end()
         LOGGER.info('Computed density! took {}'.format(mtimer))

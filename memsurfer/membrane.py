@@ -37,6 +37,7 @@ class Membrane(object):
                                     used only for periodic domain
                 bbox:           ndarray of shape (nverts, 3)
                                     required for periodic domain
+                labels:         label for each point
         '''
         # 3d points
         if points.shape[1]!= 3:
@@ -221,11 +222,14 @@ class Membrane(object):
         # on every vertex
     def estimate_density(self, sigma, name, normalize, labels=[]):
 
-        if len(labels) > 0 and self.labels.shape == (0,0):
+        nlabels = len(labels)
+
+        # if labels are not available
+        if nlabels == 0 and self.labels.shape == (0,0):
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         # estimate density of all points
-        if len(labels) == 0:
+        if nlabels == 0:
             self.properties[name] = self.mesh2.estimate_density(sigma, name, normalize, np.empty([0]))
             return
 
@@ -238,7 +242,7 @@ class Membrane(object):
         self.properties[name] = self.mesh2.estimate_density(sigma, name, normalize, lidxs)
 
     # --------------------------------------------------------------------------
-    def write(self, outprefix, params={}):
+    def write_all(self, outprefix, params={}):
 
         from utils import write2vtkpolydata
 
@@ -263,16 +267,34 @@ class Membrane(object):
         self.mesh3.tmesh.write_binary(outprefix+'_mesh3.bin')
         self.mesh32.tmesh.write_binary(outprefix+'_mesh32.bin')
 
+    def write(self, outprefix, params={}):
+
+        from utils import write2vtkpolydata
+
+        pparams = {'normals': self.pnormals}
+        if self.labels.shape != (0,0):
+            pparams['labels'] = self.labels
+
+        write2vtkpolydata(outprefix+'_points.vtp', self.points, pparams)
+
+        if self.labels.shape != (0,0):
+            params['labels'] = self.labels
+
+        for key in self.properties.keys():
+            params[key] = self.properties[key]
+
+        self.mesh32.write_vtp(outprefix+'_membrane.vtp', params)
+
     # --------------------------------------------------------------------------
     # A static method that computes and returns a membrane object
     # --------------------------------------------------------------------------
     @staticmethod
-    def compute(positions, bbox, periodic):
+    def compute(positions, labels, bbox, periodic):
 
         knbrs = 18
 
         # initialize the membrane!
-        m = Membrane(positions, periodic=periodic, bbox=bbox)
+        m = Membrane(positions, labels=labels, periodic=periodic, bbox=bbox)
 
         # compute the membrane
         m.fit_points_to_box_xy()
@@ -284,11 +306,6 @@ class Membrane(object):
         m.mesh3.need_normals()
         m.mesh3.need_pointareas()
         m.mesh3.need_curvatures()
-
-        sigma = 0.2
-        name = 'density_{0}_k{1:.1f}'.format('all', sigma)
-        m.estimate_density(sigma, name, True)
-
         return m
 
     # --------------------------------------------------------------------------

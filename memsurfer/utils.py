@@ -243,6 +243,9 @@ def write2vtkpolydata(filename, verts, properties):
         if not isinstance(data, np.ndarray):
             data = np.array([data])
 
+        if data.dtype.type is np.string_:
+            uvals, data = np.unique(data, return_inverse=True)
+
         VTK_data = numpy_support.numpy_to_vtk(num_array=data)
         VTK_data.SetName(key)
 
