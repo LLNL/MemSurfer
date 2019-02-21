@@ -331,6 +331,13 @@ class TriMesh(object):
                     self.vertices.min(axis=0), self.vertices.max(axis=0)))
 
     # --------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
+    def copy_densities(self, mesh):
+        self.tmesh.set_fields(mesh.tmesh, 'density')
+
+    def write_binary(self, filename):
+        self.tmesh.write_binary(filename)
+
     def write_vtp(self, filename, properties={}):
 
         duplicate_verts = False

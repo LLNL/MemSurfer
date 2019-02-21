@@ -66,10 +66,16 @@ public:
     DistancePeriodicXYSquared(const Vertex& bbox0, const Vertex& bbox1) {
         mBox0 = bbox0;  mBox1 = bbox1;
         mBoxw = mBox1 - mBox0;
+        return;
+        std::cout << " Initializing DistancePeriodicXYSquared. Domain = "
+                  << " [" << mBox0[0] << ", " << mBox0[1] << "] -- "
+                  << " [" << mBox1[0] << ", " << mBox1[1] << "], width = "
+                  << " [" << mBoxw[0] << ", " << mBoxw[1] << "]\n";
     }
     TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction bx, TypeFunction by) const {
 
         if (fabs(ax - bx) >= 0.5*mBoxw[0]) {
+
             if (ax < bx)    ax += mBoxw[0];
             else            bx += mBoxw[0];
         }

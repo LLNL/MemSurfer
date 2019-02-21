@@ -177,6 +177,17 @@ public:
         mFaces = mesh.mFaces;
         return true;
     }
+
+    bool set_fields(const TriMesh &mesh, std::string key) {
+        for (auto iter = mesh.mFields.begin(); iter != mesh.mFields.end(); iter++) {
+            if (iter->first.find(key) == 0) {
+                this->mFields[iter->first] = iter->second;
+            }
+        }
+        return true;
+    }
+
+
     bool set_faces(uint32_t *_, int n, int d) {
         return this->delinearize<3,TypeIndex,uint32_t>(_,n,d,mFaces);
     }
