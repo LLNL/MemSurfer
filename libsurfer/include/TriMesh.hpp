@@ -90,7 +90,7 @@ protected:
     /// ---------------------------------------------------------------------------------------
     //! linearize data into a single vector for interfacing with Python
     template <uint8_t D,  typename T, typename Tout>
-    static std::vector<Tout> linearize(const std::vector<Vec<D,T> > &data, size_t sz = 0) {
+    static std::vector<Tout> linearize(const std::vector<Vec<D,T> > &data, const uint8_t &vdim, size_t sz = 0) {
 
         static_assert(D == 2 || D == 3, "TriMesh::linearize() expected 2 or 3 dimensional vector");
         std::vector<Tout> ldata;
@@ -98,9 +98,9 @@ protected:
         if (sz == 0)
             sz = data.size();
 
-        ldata.reserve(D*sz);
+        ldata.reserve(vdim*sz);
         for (size_t i = 0; i < sz; i++) {
-        for (uint8_t d = 0; d < D; d++)
+        for (uint8_t d = 0; d < vdim; d++)
             ldata.push_back(data[i][d]);
         }
         return ldata;
@@ -126,6 +126,14 @@ protected:
         }
         return true;
     }
+
+    /// ---------------------------------------------------------------------------------------
+    static void need_normals(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
+                             std::vector<Normal> &fnormals, std::vector<Normal> &pnormals);
+
+    static void need_pointareas(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
+                                std::vector<TypeFunction> &areas);
+
 
     /// ---------------------------------------------------------------------------------------
     //! set dimensionalty of the mesh vertices
@@ -178,8 +186,8 @@ public:
     size_t nfaces() const {     return mFaces.size();       }
 
     //! Returns linearized vertices and faces
-    std::vector<TypeFunction> get_vertices() const {    return linearize<3,TypeFunction,TypeFunction>(this->mVertices);    }
-    std::vector<TypeIndexI> get_faces() const {         return linearize<3,TypeIndex,TypeIndexI>(this->mFaces);          }
+    std::vector<TypeFunction> get_vertices() const {    return linearize<3,TypeFunction,TypeFunction>(this->mVertices, this->mDim);    }
+    std::vector<TypeIndexI> get_faces() const {         return linearize<3,TypeIndex,TypeIndexI>(this->mFaces, 3);          }
 
     //! Return linearized function
     std::vector<TypeFunction> get_field(const std::string &name) const {
@@ -188,10 +196,43 @@ public:
     }
 
     //! Compute vertex normals
-    std::vector<TypeFunction> need_normals(bool verbose = false);
+    const std::vector<TypeFunction> need_normals(bool verbose = false) {
+
+        // Compute only if point areas are not available
+        if (this->mPointNormals.size() != this->mVertices.size()) {
+
+            if (verbose) {
+                std::cout << "   > " << this->mName << "::need_normals()...";
+                fflush(stdout);
+            }
+
+            TriMesh::need_normals(this->mFaces, this->mVertices, this->mFaceNormals, this->mPointNormals);
+
+            if(verbose)
+                std::cout << " Done!\n";
+        }
+        return linearize<3,TypeFunction,TypeFunction>(this->mPointNormals, 3);
+    }
 
     //! Compute per-vertex point areas
-    const std::vector<TypeFunction>& need_pointareas(bool verbose = false);
+    const std::vector<TypeFunction>& need_pointareas(bool verbose = false) {
+
+        // Compute only if point areas are not available
+        if (mFields.find("point_areas") == mFields.end()) {
+
+            if (verbose) {
+                std::cout << "   > " << this->mName << "::need_pointareas()...";
+                fflush(stdout);
+            }
+
+            TriMesh::need_pointareas(this->mFaces, this->mVertices, this->mFields["point_areas"]);
+
+            if(verbose)
+                std::cout << " Done!\n";
+        }
+        return mFields["point_areas"];
+    }
+
 
     //! Compute density
     const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, bool verbose = false) {
@@ -273,7 +314,7 @@ private:
     //! map of duplicate vertices to their original ones
     using dupMap = typename std::tuple<TypeIndex, int, int>;
 
-    std::vector<dupMap > mDuplicateVerts_OrigIds;
+    std::vector<dupMap> mDuplicateVerts_OrigIds;
     std::vector<Vertex> mDuplicateVerts;
 
     //! wrap vertices in xy (dim = 2) or in xyz (dim = 3)
@@ -315,27 +356,88 @@ public:
 
     std::vector<TypeIndexI> periodic_faces(bool combined = false) const {
         if (!combined)
-            return linearize<3,TypeIndex,TypeIndexI>(mPeriodicFaces);
-        std::vector<TypeIndexI> f0 = linearize<3,TypeIndex,TypeIndexI>(mFaces);
-        std::vector<TypeIndexI> f1 = linearize<3,TypeIndex,TypeIndexI>(mPeriodicFaces);
+            return linearize<3,TypeIndex,TypeIndexI>(mPeriodicFaces, 3);
+        std::vector<TypeIndexI> f0 = linearize<3,TypeIndex,TypeIndexI>(mFaces, 3);
+        std::vector<TypeIndexI> f1 = linearize<3,TypeIndex,TypeIndexI>(mPeriodicFaces, 3);
         f0.insert(f0.end(), f1.begin(), f1.end());
         return f0;
     }
     std::vector<TypeIndexI> trimmed_faces(bool combined = false) const {
         if (!combined)
-            return linearize<3,TypeIndex,TypeIndexI>(mTrimmedFaces);
-        std::vector<TypeIndexI> f0 = linearize<3,TypeIndex,TypeIndexI>(mFaces);
-        std::vector<TypeIndexI> f1 = linearize<3,TypeIndex,TypeIndexI>(mTrimmedFaces);
+            return linearize<3,TypeIndex,TypeIndexI>(mTrimmedFaces, 3);
+        std::vector<TypeIndexI> f0 = linearize<3,TypeIndex,TypeIndexI>(mFaces, 3);
+        std::vector<TypeIndexI> f1 = linearize<3,TypeIndex,TypeIndexI>(mTrimmedFaces, 3);
         f0.insert(f0.end(), f1.begin(), f1.end());
         return f0;
     }
     std::vector<TypeFunction> duplicated_vertices(bool combined = false) const {
         if (!combined)
-            return linearize<3,TypeFunction,TypeFunction>(mDuplicateVerts);
-        std::vector<TypeFunction> f0 = linearize<3,TypeFunction,TypeFunction>(mVertices);
-        std::vector<TypeFunction> f1 = linearize<3,TypeFunction,TypeFunction>(mDuplicateVerts);
+            return linearize<3,TypeFunction,TypeFunction>(mDuplicateVerts, this->mDim);
+        std::vector<TypeFunction> f0 = linearize<3,TypeFunction,TypeFunction>(mVertices, this->mDim);
+        std::vector<TypeFunction> f1 = linearize<3,TypeFunction,TypeFunction>(mDuplicateVerts, this->mDim);
         f0.insert(f0.end(), f1.begin(), f1.end());
         return f0;
+    }
+
+    std::vector<TypeIndexI> duplicate_ids() const {
+        const size_t ndups = mDuplicateVerts_OrigIds.size();
+        std::vector<TypeIndexI> dids (ndups);
+        for(size_t i = 0; i < ndups; i++)
+            dids[i] = std::get<0>(mDuplicateVerts_OrigIds[i]);
+        return dids;
+    }
+
+    /// ---------------------------------------------------------------------------------------
+    const std::vector<TypeFunction>& need_pointareas(bool verbose = false) {
+
+        // Compute only if point areas are not available
+        if (mFields.find("point_areas") == mFields.end()) {
+
+            if (verbose) {
+                std::cout << "   > " << this->mName << "::need_pointareas()...";
+                fflush(stdout);
+            }
+
+            std::vector<Face> faces = this->mFaces;
+            faces.insert(faces.end(), this->mTrimmedFaces.begin(), this->mTrimmedFaces.end());
+
+            std::vector<Vertex> vertices = this->mVertices;
+            vertices.insert(vertices.end(), this->mDuplicateVerts.begin(), this->mDuplicateVerts.end());
+
+            TriMesh::need_pointareas(faces, vertices, mFields["point_areas"]);
+            mFields["point_areas"].resize(this->mVertices.size());
+
+            if(verbose)
+                std::cout << " Done!\n";
+        }
+        return mFields["point_areas"];
+    }
+
+    const std::vector<TypeFunction> need_normals(bool verbose = false) {
+
+        // Compute only if point areas are not available
+        if (this->mPointNormals.size() != this->mVertices.size()) {
+
+            if (verbose) {
+                std::cout << "   > " << this->mName << "::need_normals()...";
+                fflush(stdout);
+            }
+
+            std::vector<Face> faces = this->mFaces;
+            faces.insert(faces.end(), this->mTrimmedFaces.begin(), this->mTrimmedFaces.end());
+
+            std::vector<Vertex> vertices = this->mVertices;
+            vertices.insert(vertices.end(), this->mDuplicateVerts.begin(), this->mDuplicateVerts.end());
+
+            TriMesh::need_normals(faces, vertices, this->mFaceNormals, this->mPointNormals);
+
+            this->mFaceNormals.resize(this->mFaces.size());
+            this->mPointNormals.resize(this->mVertices.size());
+
+            if(verbose)
+                std::cout << " Done!\n";
+        }
+        return linearize<3,TypeFunction,TypeFunction>(this->mPointNormals,3);
     }
 
     /// ---------------------------------------------------------------------------------------

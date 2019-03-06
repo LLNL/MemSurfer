@@ -13,18 +13,21 @@ For details, see https://github.com/LLNL/MemSurfer.
 # ------------------------------------------------------------------------------
 import sys
 import numpy as np
-
-from trimesh import TriMesh
-from utils import Timer
-
-import pymemsurfer
-from pypoisson import poisson_reconstruction
-
 import logging
 LOGGER = logging.getLogger(__name__)
 
+from pypoisson import poisson_reconstruction
+
+import pymemsurfer
+from trimesh import TriMesh
+from utils import Timer
+
+# ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 class Membrane(object):
+    '''
+       Class to create and manipulate membrane surfaces
+    '''
 
     # --------------------------------------------------------------------------
     # constructor
@@ -32,12 +35,12 @@ class Membrane(object):
         '''
         points: ndarray of shape (npoints, 3)
         kwargs:
+                labels:         label for each point
                 periodic:       boolean flag for periodicity (default: False)
-                boundary_layer: float value for boundary layer thickess (default: 0.2)
-                                    used only for periodic domain
                 bbox:           ndarray of shape (nverts, 3)
                                     required for periodic domain
-                labels:         label for each point
+                boundary_layer: float value for boundary layer thickess (default: 0.2)
+                                    used only for periodic domain
         '''
         # 3d points
         if points.shape[1]!= 3:
@@ -73,24 +76,21 @@ class Membrane(object):
             LOGGER.info('\t given periodic bbox = {} {}'.format(self.bbox[0],self.bbox[1]))
 
         # create point set object
-
         self.points = self.points.astype(np.float32)
         self.bbox = self.bbox.astype(np.float32)
         self.pset = pymemsurfer.PointSet(self.points)
-
-        # point normals
-        self.properties = {}
         self.pnormals = np.empty((0,0))
+
+        # other properties
+        self.properties = {}
 
     # --------------------------------------------------------------------------
     def fit_points_to_box_xy(self):
         '''
             Fit the points in a periodic domain to the given bounding box
         '''
-        # move the points to make sure the points lie in the box
         nadjusted = 0
         boxw = self.bbox[1,:] - self.bbox[0,:]
-
         for d in xrange(2):
 
             l = np.where(self.points[:,d] < self.bbox[0,d])[0]
@@ -109,9 +109,9 @@ class Membrane(object):
         return nadjusted
 
     # --------------------------------------------------------------------------
-    def need_pnormals(self, knbrs=18, ndir_hint=+1):
+    def compute_pnormals(self, knbrs=18, ndir_hint=+1):
         '''
-            Estimate normals for the point set, using k nbrs
+            Estimate normals for the point set, using k nearest neighhbors
         '''
         if self.pnormals.shape != (0,0):
             return self.pnormals
@@ -137,7 +137,7 @@ class Membrane(object):
         maxAbsZ = np.argmax(np.abs(self.pnormals[:,2]))
         if self.pnormals[maxAbsZ, 2] * ndir_hint < 0:
             LOGGER.debug('Inverting normals')
-            self.pnormals = -1 * self.pnormals
+            self.pnormals *= -1.0
 
         mtimer.end()
         LOGGER.info('Computed {} normals! took {}'.format(self.pnormals.shape, mtimer))
@@ -145,82 +145,94 @@ class Membrane(object):
         return self.pnormals
 
     # --------------------------------------------------------------------------
-    def fit_surface(self, depth=10):
+    def compute_approx_surface(self, exactness_level=10):
         '''
             Compute an approximating surface using Poisson recronstruction
-                depth:  controls the smoothness
-                        larger depth will fit the points more --> less smooth
+                exactness_level:  controls the smoothness
+                        larger exactness_level will fit the points more --> less smooth
         '''
-        self.need_pnormals()
+        self.compute_pnormals()
 
         LOGGER.info('Computing Poisson surface for {} points'.format(self.npoints))
         mtimer = Timer()
         sfaces, sverts = poisson_reconstruction(self.points.tolist(),
                                                 self.pnormals.tolist(),
-                                                depth=depth)
+                                                depth=exactness_level)
         mtimer.end(False)
         LOGGER.info('Poisson surface computed! took {} created {} faces and {} vertices.'
                     .format(mtimer, len(sfaces), len(sverts)))
 
         # represent the poisson surface as a triangulation
-        self.mesh3poisson = TriMesh(sverts, faces=sfaces, label='mesh3poisson')
-        #self.mesh3poisson.write_vtp('_temp3.vtp', {})#params)
-        #self.mesh3poisson.remesh()
-        #self.mesh3poisson.write_vtp('_temp3_remeshed.vtp', {})#params)
-        self.mesh3poisson.display()
+        self.surf_poisson = TriMesh(sverts, faces=sfaces, label='surf_poisson')
+        #self.surf_poisson.write_vtp('_temp3.vtp', {})#params)
+        #self.surf_poisson.remesh()
+        #self.surf_poisson.write_vtp('_temp3_remeshed.vtp', {})#params)
+        self.surf_poisson.display()
 
     # --------------------------------------------------------------------------
-    # retriangulate the surface by projecting a set of points on it
-    def retriangulate(self, points):
-
+    def compute_membrane_surface(self, points):
+        '''
+            Compute the membrane surfaces that pass
+                through the given set of points
+        '''
         # 1. parameterize the membrane surface
-        self.mesh3poisson.parameterize()
-
-        #self.mesh2poisson = TriMesh(self.mesh3poisson.pverts, faces=self.mesh3poisson.faces)
-        #self.mesh2poisson.write_vtp('temp_mesh2poisson.vtp')
+        self.surf_poisson.parameterize()
 
         # 2. project the points on the surface and 2D plane
-        (self.spoints, self.ppoints) = self.mesh3poisson.project_on_surface_and_plane(points)
+        (self.spoints, self.ppoints) = self.surf_poisson.project_on_surface_and_plane(points)
 
         # 3. create a 2D triangulation of the projected points
-        self.mesh2 = TriMesh(self.ppoints, periodic=self.periodic, label='mesh2')
-        self.mesh32 = TriMesh(self.spoints, periodic=self.periodic, label='mesh32')
-        self.mesh3 = TriMesh(self.points, periodic=self.periodic, label='mesh3')
+        self.surf_planar = TriMesh(self.ppoints, periodic=self.periodic, label='surf_planar')
+        self.surf_approx = TriMesh(self.spoints, periodic=self.periodic, label='surf_approx')
+        self.surf_exact  = TriMesh(self.points,  periodic=self.periodic, label='surf_exact')
 
         if self.periodic:
 
             # use the bbox of parameterized vertices (= bbox of poisson surface)
                 # that is the absolute maximum
-            bb0 = self.mesh3poisson.pverts.min(axis=0)
-            bb1 = self.mesh3poisson.pverts.max(axis=0)
-            self.mesh2.set_bbox(bb0, bb1)
+            bb0 = self.surf_poisson.pverts.min(axis=0)
+            bb1 = self.surf_poisson.pverts.max(axis=0)
+            self.surf_planar.set_bbox(bb0, bb1)
 
             # bounding box of the points projected on the surface
             bb0 = self.spoints.min(axis=0)
             bb1 = self.spoints.max(axis=0)
-            self.mesh32.set_bbox(bb0, bb1)
+            self.surf_approx.set_bbox(bb0, bb1)
 
             # bounding box of the actual points
             bb0 = self.points.min(axis=0)
             bb1 = self.points.max(axis=0)
-            self.mesh3.set_bbox(bb0, bb1)
+            self.surf_exact.set_bbox(bb0, bb1)
 
         # compute delaunay triangulation of the planar points
-        self.mesh2.delaunay()
-        self.mesh32.copy_triangulation(self.mesh2)
-        self.mesh3.copy_triangulation(self.mesh2)
+        self.surf_planar.delaunay()
+        self.surf_approx.copy_triangulation(self.surf_planar)
+        self.surf_exact.copy_triangulation(self.surf_planar)
 
         # ----------------------------------------------------------------------
-        # set the correct bounding box
+        # change the bounding box of the planar surface
         if self.periodic:
             bb0 = self.ppoints.min(axis=0)
             bb1 = self.ppoints.max(axis=0)
-            self.mesh2.set_bbox(bb0, bb1)
+            self.surf_planar.set_bbox(bb0, bb1)
+
+    # --------------------------------------------------------------------------
+    def compute_properties(self, mtype='approx'):
+
+        assert mtype == 'approx' or mtype == 'exact'
+        if mtype == 'exact':
+            self.surf_exact.compute_normals()
+            self.surf_exact.compute_pointareas()
+            self.surf_exact.compute_curvatures()
+        else:
+            self.surf_approx.compute_normals()
+            self.surf_approx.compute_pointareas()
+            self.surf_approx.compute_curvatures()
 
     # --------------------------------------------------------------------------
     # compute density of points given by plabels
         # on every vertex
-    def estimate_density(self, type, sigma, name, normalize, labels=[]):
+    def compute_density(self, type, sigma, name, normalize, labels=[]):
 
         nlabels = len(labels)
 
@@ -233,7 +245,7 @@ class Membrane(object):
 
         # estimate density of all points
         if nlabels == 0:
-            self.properties[name] = self.mesh32.estimate_density(type, sigma, name, normalize, np.empty([0]))
+            self.properties[name] = self.surf_approx.compute_density(type, sigma, name, normalize, np.empty([0]))
             return
 
         # estimate density of a subset of points
@@ -242,8 +254,54 @@ class Membrane(object):
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         lidxs = np.where(np.in1d(self.labels, labels))[0]
-        self.properties[name] = self.mesh32.estimate_density(type, sigma, name, normalize, lidxs)
+        self.properties[name] = self.surf_approx.compute_density(type, sigma, name, normalize, lidxs)
 
+    # --------------------------------------------------------------------------
+    @staticmethod
+    def compute_thickness(a, b, mtype='approx'):
+
+        assert mtype == 'approx' or mtype == 'exact'
+        if mtype == 'exact':
+            a.properties['thickness'] = a.surf_exact.compute_distance_to_surface(b.surf_exact)
+            b.properties['thickness'] = b.surf_exact.compute_distance_to_surface(a.surf_exact)
+        else:
+            a.properties['thickness'] = a.surf_approx.compute_distance_to_surface(b.surf_approx)
+            b.properties['thickness'] = b.surf_approx.compute_distance_to_surface(a.surf_approx)
+
+    # --------------------------------------------------------------------------
+    @staticmethod
+    def compute_densities(membranes, types, sigmas, l):
+
+        labels = [] if l == 'all' else [l]
+        for t in types:
+            for s in sigmas:
+                name = 'density_type{0}_{1}_k{2:.1f}'.format(t, l, s)
+                for m in membranes:
+                    m.compute_density(t, s, name, True, labels)
+
+    # --------------------------------------------------------------------------
+    # A static method that computes and returns a membrane object
+    # --------------------------------------------------------------------------
+    @staticmethod
+    def compute(positions, labels, bbox, periodic):
+
+        knbrs = 18
+
+        # initialize the membrane!
+        m = Membrane(positions, labels=labels, periodic=periodic, bbox=bbox)
+
+        # compute the membrane
+        m.fit_points_to_box_xy()
+        m.compute_pnormals(knbrs)
+        m.compute_approx_surface()
+        m.compute_membrane_surface(positions)
+
+        # compute properties on the membrane
+        m.compute_properties('exact')
+        m.compute_properties('approx')
+        return m
+
+    # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
     def write_all(self, outprefix, params={}):
 
@@ -254,7 +312,7 @@ class Membrane(object):
             pparams['labels'] = self.labels
 
         write2vtkpolydata(outprefix+'_points.vtp', self.points, pparams)
-        self.mesh3poisson.write_vtp(outprefix+'_mesh3poisson.vtp')
+        self.surf_poisson.write_vtp(outprefix+'_surface_poisson.vtp')
 
         if self.labels.shape != (0,0):
             params['labels'] = self.labels
@@ -262,13 +320,14 @@ class Membrane(object):
         for key in self.properties.keys():
             params[key] = self.properties[key]
 
-        self.mesh2.write_vtp(outprefix+'_mesh2.vtp', params)
-        self.mesh3.write_vtp(outprefix+'_mesh3.vtp', params)
-        self.mesh32.write_vtp(outprefix+'_mesh32.vtp', params)
+        #self.surf_exact.faces = self.surf_approx.faces
+        self.surf_planar.write_vtp(outprefix+'_planar.vtp', params)
+        self.surf_exact.write_vtp(outprefix+'_membrane_exact.vtp', params)
+        self.surf_approx.write_vtp(outprefix+'_membrane_approx.vtp', params)
 
-        self.mesh2.tmesh.write_binary(outprefix+'_mesh2.bin')
-        self.mesh3.tmesh.write_binary(outprefix+'_mesh3.bin')
-        self.mesh32.tmesh.write_binary(outprefix+'_mesh32.bin')
+        #self.surf_planar.tmesh.write_binary(outprefix+'_mesh2.bin')
+        #self.surf_exact.tmesh.write_binary(outprefix+'_mesh3.bin')
+        #self.surf_approx.tmesh.write_binary(outprefix+'_mesh32.bin')
 
     def write(self, outprefix, params={}):
 
@@ -286,35 +345,8 @@ class Membrane(object):
         for key in self.properties.keys():
             params[key] = self.properties[key]
 
-        self.mesh32.write_vtp(outprefix+'_membrane.vtp', params)
-        #self.mesh32.write_off("test.off")
-
-    # --------------------------------------------------------------------------
-    # A static method that computes and returns a membrane object
-    # --------------------------------------------------------------------------
-    @staticmethod
-    def compute(positions, labels, bbox, periodic):
-
-        knbrs = 18
-
-        # initialize the membrane!
-        m = Membrane(positions, labels=labels, periodic=periodic, bbox=bbox)
-
-        # compute the membrane
-        m.fit_points_to_box_xy()
-        m.need_pnormals(knbrs)
-        m.fit_surface()
-        m.retriangulate(positions)
-
-        # compute properties on the membrane
-        m.mesh32.need_normals()
-        m.mesh32.need_pointareas()
-        m.mesh32.need_curvatures()
-        return m
+        self.surf_approx.write_vtp(outprefix+'_membrane.vtp', params)
+        #self.surf_approx.write_off("test.off")
 
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
-    @staticmethod
-    def compute_thickness(a, b):
-        a.properties['thickness'] = a.mesh32.estimate_distances(b.mesh32)
-        b.properties['thickness'] = b.mesh32.estimate_distances(a.mesh32)

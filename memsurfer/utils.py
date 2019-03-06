@@ -229,9 +229,19 @@ def write2vtkpolydata(filename, verts, properties):
         faces = properties['faces']
         for f in faces:
             cell = vtk.vtkTriangle()
+
+            is_periodic = False
             for i in xrange(3):
                 cell.GetPointIds().SetId(i, f[i])
-            cells.InsertNextCell(cell)
+
+                p = polydata.GetPoint(f[i])
+                q = polydata.GetPoint(f[(i+1)%3])
+
+                if abs(p[0]-q[0]) > 100 or abs(p[1]-q[1]) > 100:
+                    is_periodic = True
+
+            if not is_periodic:
+                cells.InsertNextCell(cell)
         polydata.SetPolys(cells)
 
     # --------------------------------------------------------------------------

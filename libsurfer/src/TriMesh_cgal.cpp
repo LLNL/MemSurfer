@@ -273,8 +273,8 @@ std::vector<TypeIndexI> TriMeshPeriodic::delaunay(bool verbose) {
 
 void TriMeshPeriodic::create_duplicate_vertices(bool verbose) {
 
-    size_t norig = mVertices.size();
-    size_t ndups = mDuplicateVerts_OrigIds.size();
+    const size_t norig = mVertices.size();
+    const size_t ndups = mDuplicateVerts_OrigIds.size();
 
     if (norig == 0 || ndups == 0 || !bbox_valid)
         return;

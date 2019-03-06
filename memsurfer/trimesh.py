@@ -27,7 +27,7 @@ class TriMesh(object):
     '''
 
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
+    # constructor
     def __init__(self, vertices, **kwargs):
         '''
         vertices: ndarray of shape (nverts, dim) # dim = 2,3
@@ -43,12 +43,12 @@ class TriMesh(object):
         self.nverts = self.vertices.shape[0]
 
         self.periodic = kwargs.get('periodic', False)
-        self.label = kwargs.get('label', 'TriMesh')
-
         if self.periodic:
             self.tmesh = pymemsurfer.TriMeshPeriodic(self.vertices)
+            self.label = kwargs.get('label', 'TriMeshPeriodic')
         else:
             self.tmesh = pymemsurfer.TriMesh(self.vertices)
+            self.label = kwargs.get('label', 'TriMesh')
 
         self.nfaces = 0
         if 'faces' in kwargs.keys():
@@ -73,6 +73,38 @@ class TriMesh(object):
         self.cverbose = LOGGER.isEnabledFor(logging.DEBUG)
 
     # --------------------------------------------------------------------------
+    def set_bbox(self, bb0, bb1):
+
+        if bb0.shape[0] == 2 and bb1.shape[0] == 2:
+            self.bbox = np.array([bb0[0], bb0[1],  bb1[0], bb1[1]])
+            self.boxw = np.array([bb1[0] - bb0[0], bb1[1] - bb0[1]])
+
+        elif bb0.shape[0] == 3 and bb1.shape[0] == 3:
+            self.bbox = np.array([bb0[0], bb0[1], bb0[2], bb1[0], bb1[1], bb1[2]])
+            self.boxw = np.array([bb1[0]-bb0[0], bb1[1]-bb0[1], bb1[2]-bb0[2]])
+
+        else:
+            raise ValueError('TriMesh got incorrect bbox: {}, {}'.format(bb0, bb1))
+
+        self.bbox = self.bbox.astype(np.float32)
+        self.boxw = self.boxw.astype(np.float32)
+        LOGGER.info('<{}> setting bbox = {}'.format(self.label, self.bbox))
+        self.tmesh.set_bbox(self.bbox)
+
+    # --------------------------------------------------------------------------
+    def copy_triangulation(self, mesh):
+
+        assert(self.periodic == mesh.periodic)
+
+        self.tmesh.set_faces(mesh.tmesh)
+        self.faces = mesh.faces
+
+        if self.periodic:
+            self.pfaces = mesh.pfaces
+            self.tfaces = mesh.tfaces
+            dverts = self.tmesh.duplicated_vertices()
+            self.dverts = np.array(dverts).reshape(-1, self.vertices.shape[1]).astype(np.float32)
+
     # --------------------------------------------------------------------------
     def parameterize(self, xy=False):
 
@@ -87,14 +119,13 @@ class TriMesh(object):
         else:
             pverts = self.tmesh.parameterize(self.cverbose)
 
-        self.pverts = np.array(pverts).reshape(self.nverts, 2)
-        self.pverts = self.pverts.astype(np.float32)
+        self.pverts = np.array(pverts).reshape(-1, 2).astype(np.float32)
+        assert self.pverts.shape[0] == self.nverts
 
         mtimer.end()
         LOGGER.info('Parameterization took {}'.format(mtimer))
         return self.pverts
 
-    # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
     def project_on_surface_and_plane(self, points):
         '''
@@ -110,6 +141,7 @@ class TriMesh(object):
 
         r = self.tmesh.project_on_surface(points.reshape(-1).tolist(), self.cverbose)
         r = np.array(r).reshape(npoints, 4)
+
         fids = r[:,0].astype(int)
         fbarys = r[:,1:4]
 
@@ -131,6 +163,8 @@ class TriMesh(object):
         LOGGER.info('\tbbox of surface projections: {}, {}'.format(spoints.min(axis=0), spoints.max(axis=0)))
         return (spoints, ppoints)
 
+    # --------------------------------------------------------------------------
+    '''
     def remesh(self):
 
         LOGGER.info('Remeshing the surface with {} vertices ad {} faces'.format(self.nverts, self.nfaces))
@@ -144,22 +178,9 @@ class TriMesh(object):
 
         mtimer.end()
         LOGGER.info('Created {} vertices and {} faces! took {}'.format(self.nverts, self.nfaces, mtimer))
+    '''
 
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
-    def copy_triangulation(self, mesh):
-
-        assert(self.periodic == mesh.periodic)
-
-        self.tmesh.set_faces(mesh.tmesh)
-        self.faces = mesh.faces
-
-        if self.periodic:
-            self.pfaces = mesh.pfaces
-            self.tfaces = mesh.tfaces
-            dverts = self.tmesh.duplicated_vertices()
-            self.dverts = np.array(dverts).reshape(-1, 3)
-
     def delaunay(self):
 
         if self.nfaces > 0:
@@ -170,23 +191,19 @@ class TriMesh(object):
         mtimer = Timer()
 
         faces = self.tmesh.delaunay(self.cverbose)
-        self.faces = np.array(faces).reshape(-1, 3)
-        self.faces = self.faces.astype(np.float32)
+        self.faces = np.array(faces).reshape(-1, 3).astype(np.uint32)
         self.nfaces = self.faces.shape[0]
 
         if self.periodic:
 
             pfaces = self.tmesh.periodic_faces()
-            self.pfaces = np.array(pfaces).reshape(-1, 3)
-            self.pfaces = self.pfaces.astype(np.float32)
+            self.pfaces = np.array(pfaces).reshape(-1, 3).astype(np.uint32)
 
             tfaces = self.tmesh.trimmed_faces()
-            self.tfaces = np.array(tfaces).reshape(-1, 3)
-            self.tfaces = self.tfaces.astype(np.float32)
+            self.tfaces = np.array(tfaces).reshape(-1, 3).astype(np.uint32)
 
             dverts = self.tmesh.duplicated_vertices()
-            self.dverts = np.array(dverts).reshape(-1, 3)
-            self.dverts = self.dverts.astype(np.float32)
+            self.dverts = np.array(dverts).reshape(-1, self.vertices.shape[1]).astype(np.float32)
 
             mtimer.end()
             LOGGER.info('Periodic Delaunay triangulation took {}! created [{} {} {}] faces, and [{} {}] vertices.'
@@ -194,8 +211,7 @@ class TriMesh(object):
                                         self.nverts, self.dverts.shape))
 
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
-    def need_normals(self):
+    def compute_normals(self):
 
         if self.pnormals.shape != (0,0):
             return self.pnormals
@@ -207,15 +223,14 @@ class TriMesh(object):
         if len(rval) != 3*self.nverts:
             raise ValueError('Incorrect normals!')
 
-        self.pnormals = np.asarray(rval).reshape(-1,3)
-        self.pnormals = self.pnormals.astype(np.float32)
+        self.pnormals = np.asarray(rval).reshape(-1,3).astype(np.float32)
 
         mtimer.end()
-
         LOGGER.info('Computed {} normals! took {}'.format(self.nverts, mtimer))
         return self.pnormals
 
-    def need_pointareas(self):
+    # --------------------------------------------------------------------------
+    def compute_pointareas(self):
 
         if self.pareas.shape != (0,):
             return self.pareas
@@ -227,15 +242,14 @@ class TriMesh(object):
         if len(rval) != self.nverts:
             raise ValueError('Incorrect point areas!')
 
-        self.pareas = np.array(rval)
-        self.pareas = self.pareas.astype(np.float32)
+        self.pareas = np.array(rval).astype(np.float32)
 
         mtimer.end()
-
         LOGGER.info('Computed {} point areas! took {}'.format(self.nverts, mtimer))
         return self.pareas
 
-    def need_curvatures(self):
+    # --------------------------------------------------------------------------
+    def compute_curvatures(self):
 
         if self.mean_curv.shape != (0,):
             return (self.mean_curv, self.gaus_curv)
@@ -254,23 +268,20 @@ class TriMesh(object):
             self.mean_curv[i] = rval[i]
             self.gaus_curv[i] = rval[self.nverts + i]
 
-        mtimer.end()
-
         self.mean_curv = self.mean_curv.astype(np.float32)
         self.gaus_curv = self.gaus_curv.astype(np.float32)
 
+        mtimer.end()
         LOGGER.info('Computed {} x2 curvatures! took {}'.format(self.nverts, mtimer))
         return (self.mean_curv, self.gaus_curv)
 
     # --------------------------------------------------------------------------
-    # estimate distance to another mesh
-    def estimate_distances(self, other):
+    def compute_distance_to_surface(self, other):
         d = self.tmesh.distance_to_other_mesh(other.tmesh)
         return np.asarray(d, dtype=np.float32)
 
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
-    def estimate_density(self, type, sigma, name, normalize, pidxs):
+    def compute_density(self, type, sigma, name, normalize, pidxs):
 
         if type < 1 or type > 3:
             raise InvalidArgument('Invalid density type, {}. Should be 1 (geodesic), 2 (2D) or 3 (3D)'.format(type))
@@ -282,8 +293,7 @@ class TriMesh(object):
         mtimer = Timer()
 
         k = pymemsurfer.DensityKernel(float(sigma))
-        #d = self.tmesh.kde(type, k, name, pidxs.tolist(), self.cverbose)
-        d = self.tmesh.kde(type, k, name, pidxs.tolist(), True)
+        d = self.tmesh.kde(type, k, name, pidxs.tolist(), self.cverbose)
         d = np.asarray(d, dtype=np.float32)
 
         if normalize:
@@ -294,50 +304,55 @@ class TriMesh(object):
         return d
 
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
-    def set_bbox(self, bb0, bb1):
-
-        if bb0.shape[0] == 2 and bb1.shape[0] == 2:
-            self.bbox = np.array([bb0[0], bb0[1],  bb1[0], bb1[1]])
-            self.boxw = np.array([bb1[0] - bb0[0], bb1[1] - bb0[1]])
-
-        elif bb0.shape[0] == 3 and bb1.shape[0] == 3:
-            self.bbox = np.array([bb0[0], bb0[1], bb0[2], bb1[0], bb1[1], bb1[2]])
-            self.boxw = np.array([bb1[0]-bb0[0], bb1[1]-bb0[1], bb1[2]-bb0[2]])
-
-        else:
-            raise ValueError('TriMesh got incorrect bbox: {}, {}'.format(bb0, bb1))
-
-        self.bbox = self.bbox.astype(np.float32)
-        self.boxw = self.boxw.astype(np.float32)
-        LOGGER.info('<{}> setting bbox = {}'.format(self.label, self.bbox))
-        self.tmesh.set_bbox(self.bbox)
-
-    # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
     def display(self):
         LOGGER.info('<{}> : {} verts, {} faces. bbox = {}, {}'
                     .format(self.label, self.nverts, self.nfaces,
                     self.vertices.min(axis=0), self.vertices.max(axis=0)))
 
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
     def write_vtp(self, filename, properties={}):
 
+        duplicate_verts = False
+
+        if not self.periodic or not duplicate_verts:
+            verts = self.vertices
+            properties['faces'] = self.faces
+
+            if self.pnormals.shape != (0,0):
+                properties['pnormals'] = self.pnormals
+            if self.pareas.shape != (0,):
+                properties['pareas'] = self.pareas
+            if self.mean_curv.shape != (0,):
+                properties['mean_curv'] = self.mean_curv
+            if self.gaus_curv.shape != (0,):
+                properties['gaus_curv'] = self.gaus_curv
+
+        else:
+            def append(a,b):
+                return np.concatenate((a,b), axis=0)
+
+            def append_dups(a,dids):
+                return append(a, a[dids])
+
+            dids = self.tmesh.duplicate_ids()
+            dids = np.array(dids, dtype=np.uint32)
+
+            verts = append(self.vertices, self.dverts)
+            properties['faces'] = append(self.faces, self.tfaces)
+
+            if self.pnormals.shape != (0,0):
+                properties['pnormals'] = append_dups(self.pnormals, dids)
+            if self.pareas.shape != (0,):
+                properties['pareas'] = append_dups(self.pareas, dids)
+            if self.mean_curv.shape != (0,):
+                properties['mean_curv'] = append_dups(self.mean_curv, dids)
+            if self.gaus_curv.shape != (0,):
+                properties['gaus_curv'] = append_dups(self.gaus_curv, dids)
+
         from utils import write2vtkpolydata
+        write2vtkpolydata(filename, verts, properties)
 
-        properties['faces'] = self.faces
-        if self.pnormals.shape != (0,0):
-            properties['pnormals'] = self.pnormals
-        if self.pareas.shape != (0,):
-            properties['pareas'] = self.pareas
-        if self.mean_curv.shape != (0,):
-            properties['mean_curv'] = self.mean_curv
-        if self.gaus_curv.shape != (0,):
-            properties['gaus_curv'] = self.gaus_curv
-
-        write2vtkpolydata(filename, self.vertices, properties)
-
+    # --------------------------------------------------------------------------
     def write_off(self, filename):
 
         from utils import write_off
@@ -352,6 +367,7 @@ class TriMesh(object):
 
         write_off(filename, verts, faces)
 
+    # --------------------------------------------------------------------------
     def write_ply(self, filename):
 
         from utils import write_off
@@ -365,5 +381,5 @@ class TriMesh(object):
 
         write_ply(filename, self.vertices, self.faces)
 
-    # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------

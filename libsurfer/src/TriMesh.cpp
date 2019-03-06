@@ -67,125 +67,96 @@ bool TriMesh::set_dimensionality(uint8_t _) {
 //! compute vertex normals
 //! -----------------------------------------------------------------------------
 
-std::vector<TypeFunction> TriMesh::need_normals(bool verbose) {
+void TriMesh::need_normals(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
+                           std::vector<Normal> &fnormals, std::vector<Normal> &pnormals) {
 
-    size_t nv = mVertices.size();
+    const size_t nv = vertices.size();
+    const size_t nf = faces.size();
 
-    // Compute only if normals are not available
-    if (mPointNormals.size() != nv) {
-
-        if (verbose) {
-            std::cout << "   > TriMesh::need_normals()...";
-            fflush(stdout);
-        }
-
-        size_t nf = mFaces.size();
-
-        mPointNormals.clear();  mPointNormals.resize(nv);
-        mFaceNormals.clear();   mFaceNormals.resize(nf);
+    fnormals.resize(nf, Normal(0,0,0));
+    pnormals.resize(nv, Normal(0,0,0));
 
 #pragma omp parallel for
-        for (size_t i = 0; i < nf; i++) {
+    for (size_t i = 0; i < nf; i++) {
 
-            const Face &f = mFaces[i];
-            const Vertex &p0 = mVertices[f[0]];
-            const Vertex &p1 = mVertices[f[1]];
-            const Vertex &p2 = mVertices[f[2]];
+        const Face &f = faces[i];
+        const Vertex &p0 = vertices[f[0]];
+        const Vertex &p1 = vertices[f[1]];
+        const Vertex &p2 = vertices[f[2]];
 
-            Normal a = p0-p1, b = p1-p2, c = p2-p0;
+        Normal a = p0-p1, b = p1-p2, c = p2-p0;
 
-            TypeFunction l2a = len2(a), l2b = len2(b), l2c = len2(c);
-            if (!l2a || !l2b || !l2c)
-                continue;
+        TypeFunction l2a = len2(a), l2b = len2(b), l2c = len2(c);
+        if (!l2a || !l2b || !l2c)
+            continue;
 
-            mFaceNormals[i] = a CROSS b;
+        fnormals[i] = a CROSS b;
 
-            mPointNormals[f[0]] += mFaceNormals[i] * TypeFunction(1.0 / (l2a * l2c));
-            mPointNormals[f[1]] += mFaceNormals[i] * TypeFunction(1.0 / (l2b * l2a));
-            mPointNormals[f[2]] += mFaceNormals[i] * TypeFunction(1.0 / (l2c * l2b));
-        }
-
-        // Make them all unit-length
-#pragma omp parallel for
-        for (size_t i = 0; i < nv; i++)
-            normalize(mPointNormals[i]);
-
-        if(verbose)
-            std::cout << " Done!\n";
+        pnormals[f[0]] += fnormals[i] * TypeFunction(1.0 / (l2a * l2c));
+        pnormals[f[1]] += fnormals[i] * TypeFunction(1.0 / (l2b * l2a));
+        pnormals[f[2]] += fnormals[i] * TypeFunction(1.0 / (l2c * l2b));
     }
 
-    return linearize<3,TypeFunction,TypeFunction>(mPointNormals);
+    // Make them all unit-length
+#pragma omp parallel for
+    for (size_t i = 0; i < nv; i++)
+        normalize(pnormals[i]);
 }
 
 //! -----------------------------------------------------------------------------
 //! compute per-vertex point areas
 //! -----------------------------------------------------------------------------
 
-const std::vector<TypeFunction>& TriMesh::need_pointareas(bool verbose) {
+void TriMesh::need_pointareas(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
+                              std::vector<TypeFunction> &areas) {
 
-    // Compute only if point areas are not available
-    if (mFields.find("point_areas") == mFields.end()) {
+    size_t nv = vertices.size();
+    size_t nf = faces.size();
 
-        if (verbose) {
-            std::cout << "   > TriMesh::need_pointareas...";
-            fflush(stdout);
+    areas.resize(nv, 0.0);
+    std::vector<Vertex> cornerareas(nf);
+
+#pragma omp parallel for
+    for (size_t i = 0; i < nf; i++) {
+
+        // Edges
+        Vertex e[3] = { vertices[faces[i][2]] - vertices[faces[i][1]],
+                        vertices[faces[i][0]] - vertices[faces[i][2]],
+                        vertices[faces[i][1]] - vertices[faces[i][0]] };
+
+        // Compute corner weights
+        TypeFunction area = 0.5f * len(e[0] CROSS e[1]);
+        TypeFunction l2[3] = { len2(e[0]), len2(e[1]), len2(e[2]) };
+        TypeFunction ew[3] = { l2[0] * (l2[1] + l2[2] - l2[0]),
+                               l2[1] * (l2[2] + l2[0] - l2[1]),
+                               l2[2] * (l2[0] + l2[1] - l2[2]) };
+
+        if (ew[0] <= 0.0f) {
+            cornerareas[i][1] = -0.25f * l2[2] * area / (e[0] DOT e[2]);
+            cornerareas[i][2] = -0.25f * l2[1] * area / (e[0] DOT e[1]);
+            cornerareas[i][0] = area - cornerareas[i][1] - cornerareas[i][2];
         }
-
-        size_t nv = mVertices.size();
-        size_t nf = mFaces.size();
-
-        std::vector<TypeFunction> pointAreas(nv);
-        std::vector<Vertex> cornerareas(nf);
-
-    #pragma omp parallel for
-        for (size_t i = 0; i < nf; i++) {
-
-            // Edges
-            Vertex e[3] = { mVertices[mFaces[i][2]] - mVertices[mFaces[i][1]],
-                            mVertices[mFaces[i][0]] - mVertices[mFaces[i][2]],
-                            mVertices[mFaces[i][1]] - mVertices[mFaces[i][0]] };
-
-            // Compute corner weights
-            TypeFunction area = 0.5f * len(e[0] CROSS e[1]);
-            TypeFunction l2[3] = { len2(e[0]), len2(e[1]), len2(e[2]) };
-            TypeFunction ew[3] = { l2[0] * (l2[1] + l2[2] - l2[0]),
-                                   l2[1] * (l2[2] + l2[0] - l2[1]),
-                                   l2[2] * (l2[0] + l2[1] - l2[2]) };
-
-            if (ew[0] <= 0.0f) {
-                cornerareas[i][1] = -0.25f * l2[2] * area / (e[0] DOT e[2]);
-                cornerareas[i][2] = -0.25f * l2[1] * area / (e[0] DOT e[1]);
-                cornerareas[i][0] = area - cornerareas[i][1] - cornerareas[i][2];
-            }
-            else if (ew[1] <= 0.0f) {
-                cornerareas[i][2] = -0.25f * l2[0] * area / (e[1] DOT e[0]);
-                cornerareas[i][0] = -0.25f * l2[2] * area / (e[1] DOT e[2]);
-                cornerareas[i][1] = area - cornerareas[i][2] - cornerareas[i][0];
-            }
-            else if (ew[2] <= 0.0f) {
-                cornerareas[i][0] = -0.25f * l2[1] * area / (e[2] DOT e[1]);
-                cornerareas[i][1] = -0.25f * l2[0] * area / (e[2] DOT e[0]);
-                cornerareas[i][2] = area - cornerareas[i][0] - cornerareas[i][1];
-            } else {
-                TypeFunction ewscale = 0.5f * area / (ew[0] + ew[1] + ew[2]);
-                for (uint8_t j = 0; j < 3; j++)
-                    cornerareas[i][j] = ewscale * (ew[(j+1)%3] + ew[(j+2)%3]);
-            }
-    #pragma omp atomic
-            pointAreas[mFaces[i][0]] += cornerareas[i][0];
-    #pragma omp atomic
-            pointAreas[mFaces[i][1]] += cornerareas[i][1];
-    #pragma omp atomic
-            pointAreas[mFaces[i][2]] += cornerareas[i][2];
+        else if (ew[1] <= 0.0f) {
+            cornerareas[i][2] = -0.25f * l2[0] * area / (e[1] DOT e[0]);
+            cornerareas[i][0] = -0.25f * l2[2] * area / (e[1] DOT e[2]);
+            cornerareas[i][1] = area - cornerareas[i][2] - cornerareas[i][0];
         }
-
-        if(verbose)
-            std::cout << " Done!\n";
-
-        mFields["point_areas"]  = pointAreas;
+        else if (ew[2] <= 0.0f) {
+            cornerareas[i][0] = -0.25f * l2[1] * area / (e[2] DOT e[1]);
+            cornerareas[i][1] = -0.25f * l2[0] * area / (e[2] DOT e[0]);
+            cornerareas[i][2] = area - cornerareas[i][0] - cornerareas[i][1];
+        } else {
+            TypeFunction ewscale = 0.5f * area / (ew[0] + ew[1] + ew[2]);
+            for (uint8_t j = 0; j < 3; j++)
+                cornerareas[i][j] = ewscale * (ew[(j+1)%3] + ew[(j+2)%3]);
+        }
+#pragma omp atomic
+        areas[faces[i][0]] += cornerareas[i][0];
+#pragma omp atomic
+        areas[faces[i][1]] += cornerareas[i][1];
+#pragma omp atomic
+        areas[faces[i][2]] += cornerareas[i][2];
     }
-
-    return mFields["point_areas"];
 }
 
 //! -----------------------------------------------------------------------------
@@ -395,7 +366,7 @@ std::vector<TypeIndexI> TriMesh::need_boundary(bool verbose) {
             std::cout << " Done!\n";
     }
 
-    return linearize<2,TypeIndex,TypeIndexI>(bedges);
+    return linearize<2,TypeIndex,TypeIndexI>(bedges, 2);
 }
 
 //! -----------------------------------------------------------------------------
