@@ -73,7 +73,7 @@ class Membrane(object):
         LOGGER.info('Initializing Membrane with {} points'.format(self.points.shape))
         LOGGER.info('\t actual bbox   = {} {}'.format(self.points.min(axis=0),self.points.max(axis=0)))
         if self.periodic  and 'bbox' in kwargs.keys():
-            LOGGER.info('\t given periodic bbox = {} {}'.format(self.bbox[0],self.bbox[1]))
+            LOGGER.info('\t given periodic bbox = {} {}'.format(self.bbox[0], self.bbox[1]))
 
         # create point set object
         self.points = self.points.astype(np.float32)
@@ -164,6 +164,7 @@ class Membrane(object):
 
         # represent the poisson surface as a triangulation
         self.surf_poisson = TriMesh(sverts, faces=sfaces, label='surf_poisson')
+
         #self.surf_poisson.write_vtp('_temp3.vtp', {})#params)
         #self.surf_poisson.remesh()
         #self.surf_poisson.write_vtp('_temp3_remeshed.vtp', {})#params)
@@ -175,6 +176,7 @@ class Membrane(object):
             Compute the membrane surfaces that pass
                 through the given set of points
         '''
+
         # 1. parameterize the membrane surface
         self.surf_poisson.parameterize()
 

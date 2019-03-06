@@ -92,18 +92,39 @@ class TriMesh(object):
         self.tmesh.set_bbox(self.bbox)
 
     # --------------------------------------------------------------------------
+    '''
+    def check_periodic(self, vertices, face):
+
+        for i in xrange(3):
+            p = vertices[face[i]]
+            q = vertices[face[(i+1)%3]]
+
+            if abs(p[0]-q[0]) > 100 or abs(p[1]-q[1]) > 100:
+                return False
+        return True
+    '''
     def copy_triangulation(self, mesh):
 
         assert(self.periodic == mesh.periodic)
 
-        self.tmesh.set_faces(mesh.tmesh)
-        self.faces = mesh.faces
+        self.tmesh.lift_delaunay(mesh.tmesh)
+        self.faces = self.tmesh.get_faces()
+        self.faces = np.array(self.faces).reshape(-1,3).astype(np.uint32)
 
         if self.periodic:
-            self.pfaces = mesh.pfaces
-            self.tfaces = mesh.tfaces
-            dverts = self.tmesh.duplicated_vertices()
-            self.dverts = np.array(dverts).reshape(-1, self.vertices.shape[1]).astype(np.float32)
+            self.pfaces = self.tmesh.periodic_faces()
+            self.tfaces = self.tmesh.trimmed_faces()
+            self.dverts = self.tmesh.duplicated_vertices()
+
+            self.pfaces = np.array(self.pfaces).reshape(-1,3).astype(np.uint32)
+            self.tfaces = np.array(self.tfaces).reshape(-1,3).astype(np.uint32)
+            self.dverts = np.array(self.dverts).reshape(-1,self.vertices.shape[1]).astype(np.float32)
+            '''
+            for f in self.faces:
+                if not self.check_periodic(self.vertices, f):
+                    print self.label, 'error in', f, self.vertices[f]
+                    exit()
+            '''
 
     # --------------------------------------------------------------------------
     def parameterize(self, xy=False):
@@ -350,6 +371,8 @@ class TriMesh(object):
                 properties['gaus_curv'] = append_dups(self.gaus_curv, dids)
 
         from utils import write2vtkpolydata
+        if self.periodic:
+            properties['bbox'] = self.boxw
         write2vtkpolydata(filename, verts, properties)
 
     # --------------------------------------------------------------------------

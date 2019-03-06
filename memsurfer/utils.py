@@ -218,6 +218,12 @@ def write2vtkpolydata(filename, verts, properties):
     points = vtk.vtkPoints()
     cells = vtk.vtkCellArray()
 
+    if 'bbox' in properties.keys():
+        box = 0.5*properties['bbox']
+        trim_box = True
+    else:
+        trim_box = False
+
     # --------------------------------------------------------------------------
     for v in verts:
         if len(v) == 3:     points.InsertNextPoint(v[0], v[1], v[2])
@@ -227,26 +233,31 @@ def write2vtkpolydata(filename, verts, properties):
     # --------------------------------------------------------------------------
     if 'faces' in properties.keys():
         faces = properties['faces']
+        #fid = 0
         for f in faces:
             cell = vtk.vtkTriangle()
 
             is_periodic = False
+
             for i in xrange(3):
                 cell.GetPointIds().SetId(i, f[i])
 
-                p = polydata.GetPoint(f[i])
-                q = polydata.GetPoint(f[(i+1)%3])
+                if trim_box:
+                    p = polydata.GetPoint(f[i])
+                    q = polydata.GetPoint(f[(i+1)%3])
 
-                if abs(p[0]-q[0]) > 100 or abs(p[1]-q[1]) > 100:
-                    is_periodic = True
+                    if abs(p[0]-q[0]) > box[0] or abs(p[1]-q[1]) > box[1]:
+                        #print 'face', fid, f, 'has periodic edge', p, q
+                        is_periodic = True
 
+            #fid+=1
             if not is_periodic:
                 cells.InsertNextCell(cell)
         polydata.SetPolys(cells)
 
     # --------------------------------------------------------------------------
     for key in properties.keys():
-        if key == 'faces':
+        if key == 'faces' or key == 'bbox':
             continue
 
         data = properties[key]

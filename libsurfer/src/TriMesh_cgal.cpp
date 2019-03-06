@@ -98,6 +98,7 @@ void TriMesh::sort_vertices(std::vector<Point_with_idx> &svertices) const {
 #include <CGAL/Triangulation_vertex_base_with_info_2.h>
 #include <CGAL/Triangulation_data_structure_2.h>
 #include <CGAL/Delaunay_triangulation_2.h>
+//#include <CGAL/Random.h>
 #endif
 
 std::vector<TypeIndexI> TriMesh::delaunay(bool verbose) {
@@ -124,6 +125,8 @@ std::vector<TypeIndexI> TriMesh::delaunay(bool verbose) {
         std::cout << "   > TriMesh::delaunay()...";
         fflush(stdout);
     }
+
+    //CGAL::Random::Random(0);
 
     // sort the vertices
     std::vector<Point_with_idx> cgalVertices;
@@ -160,6 +163,7 @@ std::vector<TypeIndexI> TriMeshPeriodic::delaunay(bool verbose) {
     return std::vector<TypeIndexI>();
 #else
 
+    //verbose = 1;
     if (this->mDim != 2) {
         std::ostringstream errMsg;
         errMsg << " TriMeshPeriodic::delaunay() requires a mesh in 2D!" << std::endl;
@@ -195,110 +199,117 @@ std::vector<TypeIndexI> TriMeshPeriodic::delaunay(bool verbose) {
         vh->info() = cgalVertices[i].second;
     }
 
-    mFaces.clear();
+    // store the raw delaunay faces
+    this->mDelaunayFaces.clear();
+    std::vector<periodicVertex> delFace (3);
 
     dt.convert_to_9_sheeted_covering();
-
-    const size_t nOrigVerts = mVertices.size();
-
-    Delaunay::Vertex_handle fverts[3];
-    Delaunay::Periodic_point fppts[3];
-    std::map<Delaunay::Vertex_handle, size_t> duplicateHandles;
-
     for(auto iter = dt.finite_faces_begin(); iter != dt.finite_faces_end(); ++iter) {
 
         // get the type of face (number of original vertex in the face)
         uint8_t num_orig_verts = 0;
         for(uint8_t vid = 0; vid < 3; vid++){
 
-            fverts[vid] = iter->vertex(vid);
-            fppts[vid] = dt.periodic_point(fverts[vid]);
-            const Delaunay::Offset &off = fppts[vid].second;
-            if (off[0] == 0 && off[1] == 0)
+            const Delaunay::Vertex_handle &vh = iter->vertex(vid);
+            const Delaunay::Offset &off = dt.periodic_point(vh).second;
+
+            const int offx = off[0] == 2 ? -1 : int(off[0]);
+            const int offy = off[1] == 2 ? -1 : int(off[1]);
+
+            delFace[vid] = periodicVertex(TypeIndex(vh->info()), offx, offy);
+            //std::cout << "\t " << int(vh->info()) << " : " << offx << ", " << offy << "\n";
+
+            if (offx == 0 && offy == 0)
                 num_orig_verts++;
         }
 
         // ignore the ones that are completely outside
-        if (num_orig_verts == 0)
-            continue;
-
-        Face face(fverts[0]->info(), fverts[1]->info(), fverts[2]->info());
-
-        // store the ones that are completely inside
-        if (num_orig_verts == 3){
-            mFaces.push_back(face);
-            continue;
+        if (num_orig_verts > 0) {
+            this->mDelaunayFaces.push_back(delFace);
         }
-
-        // add this face as is, in the list of periodic faces
-        mPeriodicFaces.push_back(face);
-
-        // unwrap the periodic faces
-        for(uint8_t vid = 0; vid < 3; vid++){
-
-            const Delaunay::Offset &off = fppts[vid].second;
-
-            // this vertex does not need to be duplicated!
-            if (off[0] == 0 && off[1] == 0) {
-                continue;
-            }
-
-            const Delaunay::Vertex_handle &vh = fverts[vid];
-            const size_t origId = vh->info();
-
-            // if this duplicate vertex has not already been added, create it
-            if (duplicateHandles.find(vh) == duplicateHandles.end()){
-
-                int off1 = off[0] == 2 ? -1 : int(off[0]);
-                int off2 = off[1] == 2 ? -1 : int(off[1]);
-
-                mDuplicateVerts_OrigIds.push_back(dupMap(origId, off1, off2));
-                duplicateHandles[vh] = mDuplicateVerts_OrigIds.size() + nOrigVerts - 1;
-            }
-
-            // replace the original with duplicate id
-            face[vid] = duplicateHandles[vh];
-        }
-        mTrimmedFaces.push_back(face);
     }
-
     if (verbose){
-        std::cout << " Done! created [" << mFaces.size() << ", " << mPeriodicFaces.size() << ", " << mTrimmedFaces.size() << "] triangles!\n";
+        std::cout << " Done! created " << mDelaunayFaces.size() << " triangles!\n";
     }
-
-    create_duplicate_vertices(verbose);
+    lift_delaunay(verbose);
     return get_faces();
 #endif
 }
 
-void TriMeshPeriodic::create_duplicate_vertices(bool verbose) {
+void TriMeshPeriodic::lift_delaunay(bool verbose) {
 
-    const size_t norig = mVertices.size();
-    const size_t ndups = mDuplicateVerts_OrigIds.size();
+    this->mFaces.clear();
+    this->mPeriodicFaces.clear();
+    this->mTrimmedFaces.clear();
+    this->mDuplicateVerts.clear();
+    this->mDuplicateVertex_periodic.clear();
 
-    if (norig == 0 || ndups == 0 || !bbox_valid)
-        return;
+    if (verbose) {
+        std::cout << "   > TriMeshPeriodic::lift_delaunay()...";
+        fflush(stdout);
+    }
 
-    mDuplicateVerts.clear();
-    mDuplicateVerts.resize(ndups);
-
+    const size_t noverts = this->mVertices.size();
+    const size_t ndfaces = this->mDelaunayFaces.size();
     const Vertex boxw = mBox1 - mBox0;
 
-    for(size_t i = 0; i < ndups; i++) {
+    for(size_t i = 0; i < ndfaces; i++) {
 
-        const dupMap &dupMap = mDuplicateVerts_OrigIds[i];
+        const std::vector<periodicVertex> &dface = this->mDelaunayFaces[i];
 
-        Vertex dv (mVertices[std::get<0>(dupMap)]);
-        int off1 =std::get<1>(dupMap);
-        int off2 =std::get<2>(dupMap);
+        Face face, tface;
+        uint8_t num_orig_verts = 0;
 
-        dv[0] += (off1 == 0) ? 0.0 : float(off1) *boxw[0];
-        dv[1] += (off2 == 0) ? 0.0 : float(off2) *boxw[1];
-        mDuplicateVerts[i] = dv;
+        for(uint8_t d = 0; d < 3; d++) {
+
+            const periodicVertex &pvertex = dface[d];
+
+            const TypeIndex orig_vid = std::get<0>(pvertex);
+            const int offx = std::get<1>(pvertex);
+            const int offy = std::get<2>(pvertex);
+
+            face[d] = orig_vid;
+            tface[d] = orig_vid;
+
+            // is an original vertex
+            if (offx == 0 && offy == 0) {
+                num_orig_verts++;
+                continue;
+            }
+
+            // needs to be duplicated
+            auto iter = std::find(mDuplicateVertex_periodic.begin(), mDuplicateVertex_periodic.end(), pvertex);
+            size_t ndupid = 0;
+
+            if (iter != mDuplicateVertex_periodic.end()) {
+                ndupid = std::distance(mDuplicateVertex_periodic.begin(), iter);
+            }
+            else {
+                // otherwise, let'd duplicate
+                Vertex dv (mVertices[orig_vid]);
+                dv[0] += (offx == 0) ? 0.0 : float(offx) *boxw[0];
+                dv[1] += (offy == 0) ? 0.0 : float(offy) *boxw[1];
+
+                ndupid = noverts + mDuplicateVerts.size();
+                mDuplicateVertex_periodic.push_back(pvertex);
+                mDuplicateVerts.push_back(dv);
+            }
+
+            tface[d] = ndupid;
+        }
+
+        if (num_orig_verts == 3) {
+            this->mFaces.push_back(face);
+        }
+        else {
+            this->mPeriodicFaces.push_back(face);
+            this->mTrimmedFaces.push_back(face);
+        }
     }
 
     if (verbose)
-        std::cout << "   > TriMeshPeriodic duplicated " << mDuplicateVerts.size() << " vertices!\n";
+        std::cout << " Done! created [" << mFaces.size() << ", " << mPeriodicFaces.size() << ", "<< mTrimmedFaces.size() << "] triangles "
+                  << " with [" << mVertices.size() << ", " << mDuplicateVerts.size() << "] vertices!\n";
 }
 
 //! -----------------------------------------------------------------------------

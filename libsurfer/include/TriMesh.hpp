@@ -305,23 +305,30 @@ private:
     //! in addition to the *actual* vertices and faces (i.e., inside the given domain)
     //! we need to store extra information
 
+    //! a periodic vertex is stored as an offset (-1,0,1) with respect to the original vertex
+    using periodicVertex = typename std::tuple<TypeIndex, int, int>;
+
+    //! delaunay vertices
+    std::vector<std::vector<periodicVertex> > mDelaunayFaces;
+
     //! the faces that go across the domain (contain original points)
     std::vector<Face> mPeriodicFaces;
 
-    //! the faces that contain duplicate points to remove periodic triangles
+    //! the faces that contain duplicate points (to replace periodic triangles)
     std::vector<Face> mTrimmedFaces;
 
-    //! map of duplicate vertices to their original ones
-    using dupMap = typename std::tuple<TypeIndex, int, int>;
+    //! the periodic vertices that map to the original
+    std::vector<periodicVertex> mDuplicateVertex_periodic;
 
-    std::vector<dupMap> mDuplicateVerts_OrigIds;
+    //! the vertices to support duplicate faces
     std::vector<Vertex> mDuplicateVerts;
 
     //! wrap vertices in xy (dim = 2) or in xyz (dim = 3)
     bool wrap_vertices(uint8_t dim = 2);
 
-    //! duplicate vertices using the map
-    void create_duplicate_vertices(bool verbose = false);
+    //! trim the periodic faces using the map
+    void lift_delaunay(bool verbose = false);
+
 
 public:
 
@@ -343,12 +350,9 @@ public:
     bool set_bbox(float *_, int n);
 
     //! set faces from a different triangulation
-    void set_faces(const TriMeshPeriodic &mesh) {
-        mFaces = mesh.mFaces;
-        mPeriodicFaces = mesh.mPeriodicFaces;
-        mTrimmedFaces = mesh.mTrimmedFaces;
-        mDuplicateVerts_OrigIds = mesh.mDuplicateVerts_OrigIds;
-        create_duplicate_vertices();
+    void lift_delaunay(const TriMeshPeriodic &mesh) {
+        this->mDelaunayFaces = mesh.mDelaunayFaces;
+        lift_delaunay();
     }
 
     /// ---------------------------------------------------------------------------------------
@@ -378,12 +382,11 @@ public:
         f0.insert(f0.end(), f1.begin(), f1.end());
         return f0;
     }
-
     std::vector<TypeIndexI> duplicate_ids() const {
-        const size_t ndups = mDuplicateVerts_OrigIds.size();
+        const size_t ndups = mDuplicateVertex_periodic.size();
         std::vector<TypeIndexI> dids (ndups);
         for(size_t i = 0; i < ndups; i++)
-            dids[i] = std::get<0>(mDuplicateVerts_OrigIds[i]);
+            dids[i] = std::get<0>(mDuplicateVertex_periodic[i]);
         return dids;
     }
 
