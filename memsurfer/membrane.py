@@ -171,7 +171,7 @@ class Membrane(object):
         self.surf_poisson.display()
 
     # --------------------------------------------------------------------------
-    def compute_membrane_surface(self, points):
+    def compute_membrane_surface(self):
         '''
             Compute the membrane surfaces that pass
                 through the given set of points
@@ -181,7 +181,7 @@ class Membrane(object):
         self.surf_poisson.parameterize()
 
         # 2. project the points on the surface and 2D plane
-        (self.spoints, self.ppoints) = self.surf_poisson.project_on_surface_and_plane(points)
+        (self.spoints, self.ppoints) = self.surf_poisson.project_on_surface_and_plane(self.points)
 
         # 3. create a 2D triangulation of the projected points
         self.surf_planar = TriMesh(self.ppoints, periodic=self.periodic, label='surf_planar')
@@ -296,7 +296,7 @@ class Membrane(object):
         m.fit_points_to_box_xy()
         m.compute_pnormals(knbrs)
         m.compute_approx_surface()
-        m.compute_membrane_surface(positions)
+        m.compute_membrane_surface()
 
         # compute properties on the membrane
         m.compute_properties('exact')

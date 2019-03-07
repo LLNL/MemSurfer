@@ -119,12 +119,6 @@ class TriMesh(object):
             self.pfaces = np.array(self.pfaces).reshape(-1,3).astype(np.uint32)
             self.tfaces = np.array(self.tfaces).reshape(-1,3).astype(np.uint32)
             self.dverts = np.array(self.dverts).reshape(-1,self.vertices.shape[1]).astype(np.float32)
-            '''
-            for f in self.faces:
-                if not self.check_periodic(self.vertices, f):
-                    print self.label, 'error in', f, self.vertices[f]
-                    exit()
-            '''
 
     # --------------------------------------------------------------------------
     def parameterize(self, xy=False):
