@@ -301,8 +301,12 @@ class TriMesh(object):
         if type < 1 or type > 3:
             raise InvalidArgument('Invalid density type, {}. Should be 1 (geodesic), 2 (2D) or 3 (3D)'.format(type))
 
-        cnt = len(self.vertices) if len(pidxs) == 0 else len(pidxs)
-        tag = 'all ({})'.format(cnt) if cnt == 0 else cnt
+        cnt = self.nverts
+        tag = 'all (of {})'.format(cnt)
+
+        if len(pidxs) > 0:
+            cnt = len(pidxs)
+            tag = '{} (of {})'.format(cnt, self.nverts)
 
         LOGGER.info('Estimating density of {} points [name = {}]'.format(tag, name))
         mtimer = Timer()
@@ -311,8 +315,14 @@ class TriMesh(object):
         d = self.tmesh.kde(type, k, name, pidxs.tolist(), self.cverbose)
         d = np.asarray(d, dtype=np.float32)
 
+        #print 'C++: ', d.min(), d.max(), d.mean(), d.sum()
+
+        # dividing d by d.sum() gives the pde of this lipid
+        # multiplying with the #lipids gives the distribution of chosen lipids
         if normalize:
-            d *= (1.0/float(cnt))
+            d *= float(cnt)/d.sum()
+
+        #print 'normalized: ', d.min(), d.max(), d.mean(), d.sum()
 
         mtimer.end()
         LOGGER.info('Computed density! took {}'.format(mtimer))

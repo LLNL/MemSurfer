@@ -35,7 +35,10 @@ public:
 
     virtual TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction bx, TypeFunction by) const = 0;
     virtual TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction az, TypeFunction bx, TypeFunction by, TypeFunction bz) const = 0;
-    virtual TypeFunction operator()(const TypeFunction *a, const TypeFunction *b, const uint8_t &dim) const = 0;
+    TypeFunction operator()(const TypeFunction *a, const TypeFunction *b, const uint8_t &dim) const {
+        return (dim == 2) ? this->operator ()(a[0], a[1], b[0], b[1]) :
+               (dim == 3) ? this->operator ()(a[0], a[1], a[2], b[0], b[1], b[2]) : -1;
+    }
 };
 
 //! ---------------------------------------------------------------------------------------------
@@ -49,10 +52,6 @@ public:
     }
     TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction az, TypeFunction bx, TypeFunction by, TypeFunction bz) const {
         return this->operator ()(ax, ay, bx, by) + (az - bz)*(az - bz);
-    }
-    TypeFunction operator()(const TypeFunction *a, const TypeFunction *b, const uint8_t &dim) const {
-        return (dim == 2) ? this->operator ()(a[0], a[1], b[0], b[1]) :
-               (dim == 3) ? this->operator ()(a[0], a[1], a[2], b[0], b[1], b[2]) : -1;
     }
 };
 
@@ -75,7 +74,6 @@ public:
     TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction bx, TypeFunction by) const {
 
         if (fabs(ax - bx) >= 0.5*mBoxw[0]) {
-
             if (ax < bx)    ax += mBoxw[0];
             else            bx += mBoxw[0];
         }
@@ -84,15 +82,10 @@ public:
             if (ay < by)    ay += mBoxw[1];
             else            by += mBoxw[1];
         }
-
         return (ax - bx)*(ax - bx) + (ay - by)*(ay - by);
     }
     TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction az, TypeFunction bx, TypeFunction by, TypeFunction bz) const {
         return this->operator ()(ax, ay, bx, by) + (az - bz)*(az - bz);
-    }
-    TypeFunction operator()(const TypeFunction *a, const TypeFunction *b, const uint8_t &dim) const {
-        return (dim == 2) ? this->operator ()(a[0], a[1], b[0], b[1]) :
-               (dim == 3) ? this->operator ()(a[0], a[1], a[2], b[0], b[1], b[2]) : -1;
     }
 };
 
@@ -130,25 +123,27 @@ public:
 
         return this->operator ()(ax, ay, bx, by) + (az - bz)*(az - bz);
     }
-    TypeFunction operator()(const TypeFunction *a, const TypeFunction *b, const uint8_t &dim) const {
-        return (dim == 2) ? this->operator ()(a[0], a[1], b[0], b[1]) :
-               (dim == 3) ? this->operator ()(a[0], a[1], a[2], b[0], b[1], b[2]) : -1;
-    }
 };
 
 //! ---------------------------------------------------------------------------------------------
 //! The baseclass for all density estimators
 class DensityKernel {
 
-  TypeFunction mSigmaSquare;
+    const bool mNormalize;
+    const TypeFunction mOneOverm2SigmaSquare;       // = -1 / (2*sigma*sigma)
+    const TypeFunction mOneOver2pSigmaSquare;       // =  1 / (2*pi*sigma*sigma)
 
 public:
-    DensityKernel(TypeFunction sigma) : mSigmaSquare(sigma*sigma) {}
-    TypeFunction operator()(TypeFunction x) const {
-        return exp(-x / mSigmaSquare);
-    }
-    static TypeFunction estimate_bandwidth(int n, const Vertex& bbox) {
-        return 30*(bbox[0] + bbox[1]) * 0.5 * 0.15 / sqrt(5*float(n));
+    DensityKernel(const TypeFunction &sigma, bool normalize = true) :
+        mNormalize(normalize),
+        mOneOverm2SigmaSquare(-1.0/(2.0*sigma*sigma)),
+        mOneOver2pSigmaSquare(1.0/(2.0*22.0/7.0*sigma*sigma)) {}
+
+
+    const TypeFunction &normalization_factor() const {  return mOneOver2pSigmaSquare;   }
+    TypeFunction operator()(const TypeFunction &xsquared) const {
+        return mNormalize ? exp(xsquared*mOneOverm2SigmaSquare) * mOneOver2pSigmaSquare :
+                            exp(xsquared*mOneOverm2SigmaSquare);
     }
 };
 

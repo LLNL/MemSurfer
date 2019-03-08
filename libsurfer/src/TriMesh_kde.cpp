@@ -244,7 +244,6 @@ void TriMesh::compute_geodesics_fw(const std::vector<Vertex> &mvertices, const s
             // distance kernels return square distance
             TypeFunction val = dist(mvertices[a][0], mvertices[a][1], mvertices[a][2],
                                     mvertices[b][0], mvertices[b][1], mvertices[b][2]);
-            val = std::sqrt(val);
 
             /*
 #ifdef PDIST
@@ -418,7 +417,7 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
 #else
             tmp = distances[i][j];
 #endif
-            tmp = k(tmp*tmp);
+            tmp = k(tmp);
             density[j] += tmp;
             density[i] += tmp;
         }}
@@ -432,7 +431,7 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
 #else
             tmp = distances[ids[i]][j];
 #endif
-            tmp = k(tmp*tmp);
+            tmp = k(tmp);
             density[j] += tmp;
         }}
     }
@@ -468,7 +467,6 @@ const std::vector<TypeFunction>& TriMesh::kde(const int &type, const DensityKern
         if (mgeodesics.empty()) {
             compute_geodesics_fw(this->mVertices, this->mFaces, dist, this->mgeodesics, verbose);
         }
-
         kde_2m(this->mVertices.size(), ids, k, this->mgeodesics, mFields[name]);
     }
     else if (type == 2) {
@@ -516,7 +514,6 @@ const std::vector<TypeFunction>& TriMeshPeriodic::kde(const int &type, const Den
         if (mgeodesics.empty()) {
             std::vector<Face> mfaces = this->mFaces;
             mfaces.insert(mfaces.end(), this->mPeriodicFaces.begin(), this->mPeriodicFaces.end());
-
             compute_geodesics_fw(this->mVertices, mfaces, dist, this->mgeodesics, verbose);
         }
         kde_2m(this->mVertices.size(), ids, k, this->mgeodesics, mFields[name]);
