@@ -315,14 +315,14 @@ class TriMesh(object):
         d = self.tmesh.kde(type, k, name, pidxs.tolist(), self.cverbose)
         d = np.asarray(d, dtype=np.float32)
 
-        #print 'C++: ', d.min(), d.max(), d.mean(), d.sum()
+		#print 'C++: ', d.min(), d.max(), d.mean(), np.median(d), d.sum()
 
         # dividing d by d.sum() gives the pde of this lipid
         # multiplying with the #lipids gives the distribution of chosen lipids
         if normalize:
             d *= float(cnt)/d.sum()
 
-        #print 'normalized: ', d.min(), d.max(), d.mean(), d.sum()
+        #print 'normalized: ', d.min(), d.max(), d.mean(), np.median(d), d.sum()
 
         mtimer.end()
         LOGGER.info('Computed density! took {}'.format(mtimer))

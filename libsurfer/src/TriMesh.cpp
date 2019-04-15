@@ -67,6 +67,7 @@ bool TriMesh::set_dimensionality(uint8_t _) {
 //! compute vertex normals
 //! -----------------------------------------------------------------------------
 
+// static
 void TriMesh::need_normals(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
                            std::vector<Normal> &fnormals, std::vector<Normal> &pnormals) {
 
@@ -107,6 +108,7 @@ void TriMesh::need_normals(const std::vector<Face> &faces, const std::vector<Ver
 //! compute per-vertex point areas
 //! -----------------------------------------------------------------------------
 
+// static
 void TriMesh::need_pointareas(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
                               std::vector<TypeFunction> &areas) {
 
@@ -159,6 +161,7 @@ void TriMesh::need_pointareas(const std::vector<Face> &faces, const std::vector<
     }
 }
 
+#if 0
 //! -----------------------------------------------------------------------------
 //! compute connectivity
 //! -----------------------------------------------------------------------------
@@ -368,7 +371,7 @@ std::vector<TypeIndexI> TriMesh::need_boundary(bool verbose) {
 
     return linearize<2,TypeIndex,TypeIndexI>(bedges, 2);
 }
-
+#endif
 //! -----------------------------------------------------------------------------
 //! Periodic Mesh
 //! -----------------------------------------------------------------------------

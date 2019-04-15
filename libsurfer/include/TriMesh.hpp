@@ -141,13 +141,13 @@ protected:
 
     //! sort vertices spatially (using cgal)
     void sort_vertices(std::vector<Point_with_idx> &svertices) const;
-
+#if 0
     //! Compute connectivity
     void need_neighbors(bool verbose = false);
     void need_adjacentfaces(bool verbose = false);
     void need_across_edge(bool verbose = false);
     std::vector<TypeIndexI> need_boundary(bool verbose = false);
-
+#endif
 public:
 
     //! Constructors
@@ -186,7 +186,6 @@ public:
         }
         return true;
     }
-
 
     bool set_faces(uint32_t *_, int n, int d) {
         return this->delinearize<3,TypeIndex,uint32_t>(_,n,d,mFaces);
@@ -244,7 +243,6 @@ public:
         return mFields["point_areas"];
     }
 
-
     //! Compute density
     const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, bool verbose = false) {
         return TriMesh::kde(type, k, name, std::vector<TypeIndexI>(), verbose);
@@ -271,9 +269,9 @@ public:
     //! compute the distance of "this" mesh from the "other" mesh
     std::vector<TypeFunction> distance_to_other_mesh(const TriMesh &other, bool verbose=false) const;
 
-
+#ifdef CGAL_GEODESIC
     void geodesic() const;
-
+#endif
 #ifdef CPP_REMESHING
     //! Remesh
     void remesh(bool verbose = false);
@@ -455,11 +453,11 @@ public:
     }
 
     /// ---------------------------------------------------------------------------------------
+    std::vector<TypeIndexI> delaunay(bool verbose = false);
+
     std::vector<TypeFunction> distance_to_other_mesh(const TriMeshPeriodic &other) const {
         return TriMesh::distance_to_other_mesh(other);
     }
-
-    std::vector<TypeIndexI> delaunay(bool verbose = false);
 
     const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, bool verbose = false) {
         return TriMeshPeriodic::kde(type, k, name, std::vector<TypeIndexI>(), verbose);

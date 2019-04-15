@@ -38,7 +38,7 @@ size_t square_to_condensed(const size_t &i, const size_t &j, const size_t &n) {
 #endif
 
 
-#ifdef GEODESICS_CGAL
+#ifdef CGAL_GEODESIC
 #include "Types.hpp"
 #include <cstdlib>
 #include <iostream>
@@ -193,6 +193,7 @@ void TriMesh::compute_geodesics_cgal(const std::vector<Vertex> &mvertices, const
 */
 #endif
 
+//! Floyd-Warshall algorithm
 void TriMesh::compute_geodesics_fw(const std::vector<Vertex> &mvertices, const std::vector<Face> &mfaces,
                                    const DistanceKernel &dist,
 #ifdef PDIST
@@ -202,9 +203,7 @@ void TriMesh::compute_geodesics_fw(const std::vector<Vertex> &mvertices, const s
 #endif
                                    bool verbose) {
 
-    //! Floyd-Warshall algorithm
     using namespace std::chrono;
-
     const size_t nverts = mvertices.size();
     const size_t nfaces = mfaces.size();
     const TypeFunction threshold = 10000.0;
@@ -244,6 +243,10 @@ void TriMesh::compute_geodesics_fw(const std::vector<Vertex> &mvertices, const s
             // distance kernels return square distance
             TypeFunction val = dist(mvertices[a][0], mvertices[a][1], mvertices[a][2],
                                     mvertices[b][0], mvertices[b][1], mvertices[b][2]);
+
+            // FW algorithm needs to "add" distances
+            // so, we should take sqrt (convert to actual distance)
+            val = std::sqrt(val);
 
             /*
 #ifdef PDIST
@@ -417,7 +420,9 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
 #else
             tmp = distances[i][j];
 #endif
-            tmp = k(tmp);
+            // geodesic distances are stored as actual distances,
+            // but density kernel requires squared distance
+            tmp = k(tmp*tmp);
             density[j] += tmp;
             density[i] += tmp;
         }}

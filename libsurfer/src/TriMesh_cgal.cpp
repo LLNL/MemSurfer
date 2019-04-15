@@ -135,8 +135,7 @@ std::vector<TypeIndexI> TriMesh::delaunay(bool verbose) {
     // compute delaunay
     Delaunay dt;
     for(size_t i = 0; i < cgalVertices.size(); i++) {
-        Kernel::Point_3 &p = cgalVertices[i].first;
-        //Delaunay::Vertex_handle vh = dt.insert(cgalVertices[i].first);
+        Kernel::Point_3 &p = cgalVertices[i].first;     // although a 3D point, the data inside is 2D!
         Delaunay::Vertex_handle vh = dt.insert(Delaunay::Point(p[0],p[1]));
         vh->info() = cgalVertices[i].second;
     }
@@ -217,8 +216,6 @@ std::vector<TypeIndexI> TriMeshPeriodic::delaunay(bool verbose) {
             const int offy = off[1] == 2 ? -1 : int(off[1]);
 
             delFace[vid] = periodicVertex(TypeIndex(vh->info()), offx, offy);
-            //std::cout << "\t " << int(vh->info()) << " : " << offx << ", " << offy << "\n";
-
             if (offx == 0 && offy == 0)
                 num_orig_verts++;
         }
@@ -282,10 +279,10 @@ void TriMeshPeriodic::lift_delaunay(bool verbose) {
             size_t ndupid = 0;
 
             if (iter != mDuplicateVertex_periodic.end()) {
-                ndupid = std::distance(mDuplicateVertex_periodic.begin(), iter);
+                ndupid = noverts + std::distance(mDuplicateVertex_periodic.begin(), iter);
             }
             else {
-                // otherwise, let'd duplicate
+                // otherwise, let's duplicate
                 Vertex dv (mVertices[orig_vid]);
                 dv[0] += (offx == 0) ? 0.0 : float(offx) *boxw[0];
                 dv[1] += (offy == 0) ? 0.0 : float(offy) *boxw[1];
@@ -303,13 +300,14 @@ void TriMeshPeriodic::lift_delaunay(bool verbose) {
         }
         else {
             this->mPeriodicFaces.push_back(face);
-            this->mTrimmedFaces.push_back(face);
+            this->mTrimmedFaces.push_back(tface);
         }
     }
 
-    if (verbose)
+    if (verbose) {
         std::cout << " Done! created [" << mFaces.size() << ", " << mPeriodicFaces.size() << ", "<< mTrimmedFaces.size() << "] triangles "
                   << " with [" << mVertices.size() << ", " << mDuplicateVerts.size() << "] vertices!\n";
+    }
 }
 
 //! -----------------------------------------------------------------------------
@@ -563,75 +561,6 @@ void from_cgal_mesh(const SurfaceMesh &mesh, std::vector<Vertex> &vertices,
 #endif
 
 //! -----------------------------------------------------------------------------
-//! geodesic distances
-//! -----------------------------------------------------------------------------
-
-#include <cstdlib>
-#include <iostream>
-#include <fstream>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Random.h>
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/Surface_mesh_shortest_path.h>
-#include <boost/lexical_cast.hpp>
-
-//typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
-//typedef CGAL::Surface_mesh<Kernel::Point_3> SurfaceMesh;
-
-typedef boost::graph_traits<SurfaceMesh> Graph_traits;
-typedef Graph_traits::vertex_iterator vertex_iterator;
-typedef Graph_traits::face_iterator face_iterator;
-
-typedef CGAL::Surface_mesh_shortest_path_traits<Kernel, SurfaceMesh> Traits;
-typedef CGAL::Surface_mesh_shortest_path<Traits> Surface_mesh_shortest_path;
-
-
-void TriMesh::geodesic() const {
-
-    SurfaceMesh tmesh = to_cgal_mesh (this->mVertices, this->mFaces);
-
-  //SurfaceMesh tmesh;
-  //std::ifstream input((argc>1)?argv[1]:"data/elephant.off");
-  //input >> tmesh;
-  //input.close();
-
-  // pick up a random face
-  //const unsigned int randSeed = argc > 2 ? boost::lexical_cast<unsigned int>(argv[2]) : 7915421;
-    const unsigned int randSeed = 10;
-  CGAL::Random rand(randSeed);
-
-  const int target_face_index = rand.get_int(0, static_cast<int>(num_faces(tmesh)));
-  face_iterator face_it = faces(tmesh).first;
-  std::advance(face_it,target_face_index);
-
-  // ... and define a barycentric coordinates inside the face
-  Traits::Barycentric_coordinates face_location = {{0.25, 0.5, 0.25}};
-
-  // construct a shortest path query object and add a source point
-  Surface_mesh_shortest_path shortest_paths(tmesh);
-  shortest_paths.add_source_point(*face_it, face_location);
-
-  // For all vertices in the tmesh, compute the points of
-  // the shortest path to the source point and write them
-  // into a file readable using the CGAL Polyhedron demo
-  std::ofstream output("shortest_paths_with_id.cgal");
-  vertex_iterator vit, vit_end;
-  for (boost::tie(vit, vit_end) = vertices(tmesh); vit != vit_end; ++vit) {
-
-    std::vector<Traits::Point_3> points;
-    shortest_paths.shortest_path_points_to_source_points(*vit, std::back_inserter(points));
-
-    // print the points
-    output << points.size() << " ";
-    for (std::size_t i = 0; i < points.size(); ++i)
-      output << " [" << points[i] << "] ";
-    output << std::endl << std::endl;
-  }
-  //return 0;
-}
-
-
-//! -----------------------------------------------------------------------------
 //! custom border parameterization
     //! instead of mapping the border to a unit square or a unit circle (what CGAL offers)
     //! map it to its xy projection
@@ -766,6 +695,76 @@ std::vector<TypeFunction> TriMesh::parameterize(bool verbose) {
 
 //! -----------------------------------------------------------------------------
 //! -----------------------------------------------------------------------------
+
+#ifdef CGAL_GEODESIC
+//! -----------------------------------------------------------------------------
+//! geodesic distances
+//! -----------------------------------------------------------------------------
+
+#include <cstdlib>
+#include <iostream>
+#include <fstream>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Random.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/Surface_mesh_shortest_path.h>
+#include <boost/lexical_cast.hpp>
+
+//typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
+//typedef CGAL::Surface_mesh<Kernel::Point_3> SurfaceMesh;
+
+typedef boost::graph_traits<SurfaceMesh> Graph_traits;
+typedef Graph_traits::vertex_iterator vertex_iterator;
+typedef Graph_traits::face_iterator face_iterator;
+
+typedef CGAL::Surface_mesh_shortest_path_traits<Kernel, SurfaceMesh> Traits;
+typedef CGAL::Surface_mesh_shortest_path<Traits> Surface_mesh_shortest_path;
+
+
+void TriMesh::geodesic() const {
+
+    SurfaceMesh tmesh = to_cgal_mesh (this->mVertices, this->mFaces);
+
+  //SurfaceMesh tmesh;
+  //std::ifstream input((argc>1)?argv[1]:"data/elephant.off");
+  //input >> tmesh;
+  //input.close();
+
+  // pick up a random face
+  //const unsigned int randSeed = argc > 2 ? boost::lexical_cast<unsigned int>(argv[2]) : 7915421;
+    const unsigned int randSeed = 10;
+  CGAL::Random rand(randSeed);
+
+  const int target_face_index = rand.get_int(0, static_cast<int>(num_faces(tmesh)));
+  face_iterator face_it = faces(tmesh).first;
+  std::advance(face_it,target_face_index);
+
+  // ... and define a barycentric coordinates inside the face
+  Traits::Barycentric_coordinates face_location = {{0.25, 0.5, 0.25}};
+
+  // construct a shortest path query object and add a source point
+  Surface_mesh_shortest_path shortest_paths(tmesh);
+  shortest_paths.add_source_point(*face_it, face_location);
+
+  // For all vertices in the tmesh, compute the points of
+  // the shortest path to the source point and write them
+  // into a file readable using the CGAL Polyhedron demo
+  std::ofstream output("shortest_paths_with_id.cgal");
+  vertex_iterator vit, vit_end;
+  for (boost::tie(vit, vit_end) = vertices(tmesh); vit != vit_end; ++vit) {
+
+    std::vector<Traits::Point_3> points;
+    shortest_paths.shortest_path_points_to_source_points(*vit, std::back_inserter(points));
+
+    // print the points
+    output << points.size() << " ";
+    for (std::size_t i = 0; i < points.size(); ++i)
+      output << " [" << points[i] << "] ";
+    output << std::endl << std::endl;
+  }
+  //return 0;
+}
+#endif
 
 #ifdef CPP_REMESHING
 #include <CGAL/Polygon_mesh_processing/remesh.h>
