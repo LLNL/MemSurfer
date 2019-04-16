@@ -34,11 +34,16 @@ def read_paths(default):
         CGAL_ROOT = default
 
     try:
+        EIGEN_ROOT = os.path.expandvars(os.environ['EIGEN_ROOT'])
+    except KeyError:
+        EIGEN_ROOT = default
+
+    try:
         BOOST_ROOT = os.path.expandvars(os.environ['BOOST_ROOT'])
     except KeyError:
         BOOST_ROOT = default
 
-    return VTK_ROOT, CGAL_ROOT, BOOST_ROOT
+    return VTK_ROOT, CGAL_ROOT, EIGEN_ROOT, BOOST_ROOT
 
 def choose_path(root, libname):
 
@@ -56,25 +61,23 @@ def choose_path(root, libname):
 # Read the correct paths for the code, including the dependencies
 # ------------------------------------------------------------------------------
 SRC_PATH = os.path.split(os.path.abspath(sys.argv[0]))[0]
-VTK_ROOT, CGAL_ROOT, BOOST_ROOT = read_paths(os.path.join(SRC_PATH, 'external'))
+VTK_ROOT, CGAL_ROOT, EIGEN_ROOT, BOOST_ROOT = read_paths(os.path.join(SRC_PATH, 'external'))
+
+print '--- vtk', VTK_ROOT
+print '--- cgal', CGAL_ROOT
+print '--- boost', BOOST_ROOT
+print '--- eigen', EIGEN_ROOT
 
 # cgal gets installed in lib or lib64
 CGAL_lpath = choose_path(CGAL_ROOT, 'libCGAL')
-VTK_lpath = os.path.join(VTK_ROOT, 'lib')
 CGAL_ipath = os.path.join(CGAL_ROOT, 'include')
-VTK_ipath = os.path.join(VTK_ROOT, 'include', 'vtk-8.1')
-EIG_ipath = os.path.join(CGAL_ROOT, 'include', 'eigen3')
-#BOOST_ipath = os.path.join(BOOST_ROOT, 'include')
-BOOST_ipath = '/opt/local/include'
 
-'''
-print 'VTK_lpath', VTK_lpath
-print 'VTK_ipath', VTK_ipath
-print 'CGAL_lpath', CGAL_lpath
-print 'CGAL_ipath', CGAL_ipath
-print 'EIG_ipath', EIG_ipath
-print 'BOOST_ipath', BOOST_ipath
-'''
+VTK_lpath = os.path.join(VTK_ROOT, 'lib')
+VTK_ipath = os.path.join(VTK_ROOT, 'include', 'vtk-8.1')
+
+EIG_ipath = os.path.join(EIGEN_ROOT, 'include', 'eigen3')
+BOOST_ipath = os.path.join(BOOST_ROOT, 'include')
+
 # ------------------------------------------------------------------------------
 # Collect the names of libraries to link to and code to compile
 # ------------------------------------------------------------------------------
@@ -114,7 +117,8 @@ ext_mod =  Extension('_pymemsurfer',
 # install pypoisson as an Extension module
 # included the setup functionality of https://github.com/mmolero/pypoisson
 # ------------------------------------------------------------------------------
-pp_path = 'pypoisson/src/PoissonRecon_v6_13/src/'
+
+pp_path = os.path.join(os.getcwd(), 'pypoisson/src/PoissonRecon_v6_13/src/')
 pp_files = [os.path.join(pp_path,x) for x in os.listdir(pp_path) if x.endswith('.cpp')]
 pp_sources = ['pypoisson/src/pypoisson.pyx'] + pp_files
 ext_pp = Extension('pypoisson', pp_sources,
