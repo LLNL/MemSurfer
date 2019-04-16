@@ -12,7 +12,7 @@ For details, see https://github.com/LLNL/MemSurfer.
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 
-%module pysurfer
+%module pymemsurfer
 
 %{
 #define SWIG_FILE_WITH_INIT

@@ -16,6 +16,7 @@ import os, sys
 import glob
 import numpy
 from setuptools import setup, find_packages, Extension
+from Cython.Build import cythonize
 
 # ------------------------------------------------------------------------------
 # Read the correct paths for the depenencies from the environment
@@ -81,7 +82,7 @@ print 'BOOST_ipath', BOOST_ipath
 # cpp code
 headers = os.path.join(SRC_PATH, 'libsurfer', 'include')
 sources = glob.glob(os.path.join(SRC_PATH, 'libsurfer', 'src', '*.cpp'))
-sources.append(os.path.join(SRC_PATH, 'memsurfer', 'pysurfer.i'))
+sources.append(os.path.join(SRC_PATH, 'memsurfer', 'pymemsurfer.i'))
 
 # external libs
 libs = glob.glob(os.path.join(VTK_lpath, 'libvtk*'))
@@ -91,7 +92,7 @@ libs = [l[3:l.rfind('.')] for l in libs]
 libs.append('CGAL')
 
 # define the extension module
-ext_mod =  Extension('_pysurfer',
+ext_mod =  Extension('_pymemsurfer',
                      sources = sources,
                      include_dirs=[headers, numpy.get_include(),
                                    BOOST_ipath, EIG_ipath, CGAL_ipath, VTK_ipath],
@@ -103,19 +104,37 @@ ext_mod =  Extension('_pysurfer',
                      extra_compile_args=['-std=c++11',
                                          '-Wno-inconsistent-missing-override',
                                          '-Wno-deprecated-declarations',
-                                         '-Wno-unknown-pragmas'],
+                                         '-Wno-unknown-pragmas',
+                                         '-Wno-misleading-indentation'],
                      extra_link_args=['-std=c++11']
                     )
 
+
+# ------------------------------------------------------------------------------
+# install pypoisson as an Extension module
+# included the setup functionality of https://github.com/mmolero/pypoisson
+# ------------------------------------------------------------------------------
+pp_path = 'pypoisson/src/PoissonRecon_v6_13/src/'
+pp_files = [os.path.join(pp_path,x) for x in os.listdir(pp_path) if x.endswith('.cpp')]
+pp_sources = ['pypoisson/src/pypoisson.pyx'] + pp_files
+ext_pp = Extension('pypoisson', pp_sources,
+                   language='c++',
+                   include_dirs = [numpy.get_include()],
+                   extra_compile_args = ['-w','-fopenmp'],
+                   extra_link_args=['-fopenmp']
+                  )
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # set up!
 setup(name='memsurfer',
       version='0.1.0',
       description='Python tool to compute bilayer membranes.',
       author='Harsh Bhatia',
       author_email='hbhatia@llnl.gov',
+      setup_requires=['cython'],
       packages=find_packages(),
-      package_data={ 'memsurfer': ['_pysurfer.so'] },
-      ext_modules=[ext_mod]
-)
+      package_data={ 'memsurfer': ['_pymemsurfer.so', 'pypoisson.so'] },
+      ext_modules=cythonize([ext_mod, ext_pp])
+     )
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------

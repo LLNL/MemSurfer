@@ -1,0 +1,3 @@
+[submodule "pypoisson"]
+	path = pypoisson
+	url = git@github.com:mmolero/pypoisson.git

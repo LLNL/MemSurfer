@@ -17,7 +17,7 @@ import numpy as np
 from trimesh import TriMesh
 from utils import Timer
 
-import pysurfer
+import pymemsurfer
 from pypoisson import poisson_reconstruction
 
 import logging
@@ -76,7 +76,7 @@ class Membrane(object):
 
         self.points = self.points.astype(np.float32)
         self.bbox = self.bbox.astype(np.float32)
-        self.pset = pysurfer.PointSet(self.points)
+        self.pset = pymemsurfer.PointSet(self.points)
 
         # point normals
         self.properties = {}

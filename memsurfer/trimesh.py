@@ -16,7 +16,7 @@ import numpy as np
 import logging
 LOGGER = logging.getLogger(__name__)
 
-import pysurfer
+import pymemsurfer
 from utils import Timer
 
 # ------------------------------------------------------------------------------
@@ -46,9 +46,9 @@ class TriMesh(object):
         self.label = kwargs.get('label', 'TriMesh')
 
         if self.periodic:
-            self.tmesh = pysurfer.TriMeshPeriodic(self.vertices)
+            self.tmesh = pymemsurfer.TriMeshPeriodic(self.vertices)
         else:
-            self.tmesh = pysurfer.TriMesh(self.vertices)
+            self.tmesh = pymemsurfer.TriMesh(self.vertices)
 
         self.nfaces = 0
         if 'faces' in kwargs.keys():
@@ -272,7 +272,7 @@ class TriMesh(object):
         LOGGER.info('Estimating density of {} points [name = {}]'.format(tag, name))
         mtimer = Timer()
 
-        k = pysurfer.DensityKernel(float(sigma))
+        k = pymemsurfer.DensityKernel(float(sigma))
         d = self.tmesh.kde(k, name, pidxs.tolist(), self.cverbose)
         d = np.asarray(d, dtype=np.float32)
 
