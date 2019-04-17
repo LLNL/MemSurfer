@@ -161,7 +161,7 @@ def write_off(filename, verts, faces):
             number = len(f)
             row = "{0}".format(number)
             for elem in f:
-                row += " {0} ".format(elem)
+                row += " {} ".format(int(elem))
             row += "\n"
             file.write(row)
 

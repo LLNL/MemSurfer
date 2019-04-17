@@ -263,8 +263,17 @@ class TriMesh(object):
         return (self.mean_curv, self.gaus_curv)
 
     # --------------------------------------------------------------------------
+    # estimate distance to another mesh
+    def estimate_distances(self, other):
+        d = self.tmesh.distance_to_other_mesh(other.tmesh)
+        return np.asarray(d, dtype=np.float32)
+
     # --------------------------------------------------------------------------
-    def estimate_density(self, sigma, name, normalize, pidxs):
+    # --------------------------------------------------------------------------
+    def estimate_density(self, type, sigma, name, normalize, pidxs):
+
+        if type < 1 or type > 3:
+            raise InvalidArgument('Invalid density type, {}. Should be 1 (geodesic), 2 (2D) or 3 (3D)'.format(type))
 
         cnt = len(self.vertices) if len(pidxs) == 0 else len(pidxs)
         tag = 'all ({})'.format(cnt) if cnt == 0 else cnt
@@ -273,7 +282,8 @@ class TriMesh(object):
         mtimer = Timer()
 
         k = pymemsurfer.DensityKernel(float(sigma))
-        d = self.tmesh.kde(k, name, pidxs.tolist(), self.cverbose)
+        #d = self.tmesh.kde(type, k, name, pidxs.tolist(), self.cverbose)
+        d = self.tmesh.kde(type, k, name, pidxs.tolist(), True)
         d = np.asarray(d, dtype=np.float32)
 
         if normalize:
@@ -336,8 +346,9 @@ class TriMesh(object):
         faces = self.faces
 
         if self.periodic:
-            verts = np.vstack((verts, self.dverts[:,0:verts.shape[1]]))
-            faces = np.vstack((faces, self.tfaces))
+            faces = np.vstack((faces, self.pfaces))
+            #verts = np.vstack((verts, self.dverts[:,0:verts.shape[1]]))
+            #faces = np.vstack((faces, self.tfaces))
 
         write_off(filename, verts, faces)
 
@@ -349,7 +360,7 @@ class TriMesh(object):
         faces = self.faces
 
         if self.periodic:
-            verts = np.vstack((verts, self.dverts[:,0:verts.shape[1]]))
+            #verts = np.vstack((verts, self.dverts[:,0:verts.shape[1]]))
             faces = np.vstack((faces, self.tfaces))
 
         write_ply(filename, self.vertices, self.faces)

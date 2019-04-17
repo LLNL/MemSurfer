@@ -97,7 +97,6 @@ void TriMesh::sort_vertices(std::vector<Point_with_idx> &svertices) const {
 #include <CGAL/Triangulation_vertex_base_2.h>
 #include <CGAL/Triangulation_vertex_base_with_info_2.h>
 #include <CGAL/Triangulation_data_structure_2.h>
-
 #include <CGAL/Delaunay_triangulation_2.h>
 #endif
 
@@ -311,10 +310,9 @@ void TriMeshPeriodic::create_duplicate_vertices(bool verbose) {
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_triangle_primitive.h>
 #include <CGAL/Projection_traits_xy_3.h>
-
 #endif
 
-std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<TypeFunction> &points, bool verbose) {
+std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<Point3> &points, bool verbose) const {
 
 #ifndef CGAL_AVAILABLE
     std::cerr << " ERROR: TriMesh::project_on_surface - CGAL not available! cannot project points on the surface!\n";
@@ -326,16 +324,6 @@ std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<TypeFunc
         errMsg << " TriMesh::project_on_surface() requires a mesh in 3D!" << std::endl;
         throw std::invalid_argument(errMsg.str());
     }
-    if (points.size() % 3 != 0) {
-        std::ostringstream errMsg;
-        errMsg << " TriMesh::project_on_surface() recieved invalid number of 3D points! got " << points.size() << " coordinates!" << std::endl;
-        throw std::invalid_argument(errMsg.str());
-    }
-
-    typedef std::list<Triangle3>::iterator Iterator;
-    typedef CGAL::AABB_triangle_primitive<Kernel, Iterator> Primitive;
-    typedef CGAL::AABB_traits<Kernel, Primitive> AABB_triangle_traits;
-    typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
 
     if (verbose) {
         std::cout << "   > TriMesh::project_on_surface(<" << points.size() << ">)...";
@@ -358,23 +346,22 @@ std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<TypeFunc
         cgalTriangles.push_back(Triangle3(cgalVertices[face[0]], cgalVertices[face[1]], cgalVertices[face[2]]));
     }
 
-    // create CGAL points
-    std::vector<Point3> cgalPoints;
-    size_t npoints = points.size() / 3;
-    cgalPoints.resize(npoints);
-    for(size_t i = 0; i < npoints; i++) {
-        cgalPoints[i] = Point3(points[3*i], points[3*i+1], points[3*i+2]);
-    }
+    // prepare for projecting
+    typedef std::list<Triangle3>::iterator Iterator;
+    typedef CGAL::AABB_triangle_primitive<Kernel, Iterator> Primitive;
+    typedef CGAL::AABB_traits<Kernel, Primitive> AABB_triangle_traits;
+    typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
 
     // create a search datastructure
     Tree tree(cgalTriangles.begin(), cgalTriangles.end());
     tree.accelerate_distance_queries();
 
     // project the requested points
+    size_t npoints = points.size();
     std::vector<TypeFunction> rval(4*npoints);
     for(size_t i = 0; i < npoints; i++){
 
-        Tree::Point_and_primitive_id closest =  tree.closest_point_and_primitive(cgalPoints[i]);
+        Tree::Point_and_primitive_id closest =  tree.closest_point_and_primitive(points[i]);
 
         int closest_fid = std::distance(cgalTriangles.begin(), closest.second);
         const Face &cface = mFaces[closest_fid];
@@ -392,6 +379,68 @@ std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<TypeFunc
     }
 
     return rval;
+#endif
+}
+
+std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<TypeFunction> &points, bool verbose) const {
+
+#ifndef CGAL_AVAILABLE
+    std::cerr << " ERROR: TriMesh::project_on_surface - CGAL not available! cannot project points on the surface!\n";
+    return std::vector<TypeFunction>();
+#else
+
+    if (points.size() % 3 != 0) {
+        std::ostringstream errMsg;
+        errMsg << " TriMesh::project_on_surface() recieved invalid number of 3D points! got " << points.size() << " coordinates!" << std::endl;
+        throw std::invalid_argument(errMsg.str());
+    }
+
+    // create CGAL points
+    std::vector<Point3> cgalPoints;
+    size_t npoints = points.size() / 3;
+    cgalPoints.resize(npoints);
+    for(size_t i = 0; i < npoints; i++) {
+        cgalPoints[i] = Point3(points[3*i], points[3*i+1], points[3*i+2]);
+    }
+    return this->project_on_surface(cgalPoints, verbose);
+#endif
+}
+
+//! compute the distance of "this" mesh from the "other" mesh
+std::vector<TypeFunction> TriMesh::distance_to_other_mesh(const TriMesh &other, bool verbose) const {
+
+#ifndef CGAL_AVAILABLE
+    std::cerr << " ERROR: TriMesh::project_on_surface - CGAL not available! cannot project points on the surface!\n";
+    return std::vector<TypeFunction>();
+#else
+
+    // project the vertices of "this" mesh onto the "other" mesh
+    // and compute the distances
+    const std::vector<Vertex> &points = this->mVertices;
+    const size_t npoints = points.size();
+
+    std::vector<Point3> cgalPoints (npoints);
+    for(size_t i = 0; i < npoints; i++) {
+        cgalPoints[i] = Point3(points[i][0], points[i][1], points[i][2]);
+    }
+
+    std::vector<TypeFunction> projections = other.project_on_surface(cgalPoints, verbose);
+    std::vector<TypeFunction> d (npoints, 0.0);
+    for(size_t i = 0; i < npoints; i++) {
+
+        // compute the projected point
+        Vertex p;
+        const size_t offst = 4*i;
+        const Face &f = other.mFaces[projections[offst]];
+
+        for(uint8_t j = 0; j < 3; j++) {
+            const TypeFunction &w = projections[offst + 1+j];
+            p += w * other.mVertices[f[j]];
+        }
+
+        d[i] = dist(p, points[i]);
+    }
+    return d;
 #endif
 }
 
@@ -418,7 +467,6 @@ std::vector<TypeFunction> TriMesh::parameterize_xy(bool verbose) {
     }
     return retval;
 }
-
 
 //! -----------------------------------------------------------------------------
 //! surface parameterization and meshing
@@ -504,6 +552,75 @@ void from_cgal_mesh(const SurfaceMesh &mesh, std::vector<Vertex> &vertices,
 #endif
 
 //! -----------------------------------------------------------------------------
+//! geodesic distances
+//! -----------------------------------------------------------------------------
+
+#include <cstdlib>
+#include <iostream>
+#include <fstream>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Random.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/Surface_mesh_shortest_path.h>
+#include <boost/lexical_cast.hpp>
+
+//typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
+//typedef CGAL::Surface_mesh<Kernel::Point_3> SurfaceMesh;
+
+typedef boost::graph_traits<SurfaceMesh> Graph_traits;
+typedef Graph_traits::vertex_iterator vertex_iterator;
+typedef Graph_traits::face_iterator face_iterator;
+
+typedef CGAL::Surface_mesh_shortest_path_traits<Kernel, SurfaceMesh> Traits;
+typedef CGAL::Surface_mesh_shortest_path<Traits> Surface_mesh_shortest_path;
+
+
+void TriMesh::geodesic() const {
+
+    SurfaceMesh tmesh = to_cgal_mesh (this->mVertices, this->mFaces);
+
+  //SurfaceMesh tmesh;
+  //std::ifstream input((argc>1)?argv[1]:"data/elephant.off");
+  //input >> tmesh;
+  //input.close();
+
+  // pick up a random face
+  //const unsigned int randSeed = argc > 2 ? boost::lexical_cast<unsigned int>(argv[2]) : 7915421;
+    const unsigned int randSeed = 10;
+  CGAL::Random rand(randSeed);
+
+  const int target_face_index = rand.get_int(0, static_cast<int>(num_faces(tmesh)));
+  face_iterator face_it = faces(tmesh).first;
+  std::advance(face_it,target_face_index);
+
+  // ... and define a barycentric coordinates inside the face
+  Traits::Barycentric_coordinates face_location = {{0.25, 0.5, 0.25}};
+
+  // construct a shortest path query object and add a source point
+  Surface_mesh_shortest_path shortest_paths(tmesh);
+  shortest_paths.add_source_point(*face_it, face_location);
+
+  // For all vertices in the tmesh, compute the points of
+  // the shortest path to the source point and write them
+  // into a file readable using the CGAL Polyhedron demo
+  std::ofstream output("shortest_paths_with_id.cgal");
+  vertex_iterator vit, vit_end;
+  for (boost::tie(vit, vit_end) = vertices(tmesh); vit != vit_end; ++vit) {
+
+    std::vector<Traits::Point_3> points;
+    shortest_paths.shortest_path_points_to_source_points(*vit, std::back_inserter(points));
+
+    // print the points
+    output << points.size() << " ";
+    for (std::size_t i = 0; i < points.size(); ++i)
+      output << " [" << points[i] << "] ";
+    output << std::endl << std::endl;
+  }
+  //return 0;
+}
+
+
+//! -----------------------------------------------------------------------------
 //! custom border parameterization
     //! instead of mapping the border to a unit square or a unit circle (what CGAL offers)
     //! map it to its xy projection
@@ -576,8 +693,8 @@ public:
         return SMP::OK;
     }
 };
-
 #endif
+
 // parameterize the mesh
 std::vector<TypeFunction> TriMesh::parameterize(bool verbose) {
 
@@ -635,6 +752,9 @@ std::vector<TypeFunction> TriMesh::parameterize(bool verbose) {
     return retval;
 }
 
+
+//! -----------------------------------------------------------------------------
+//! -----------------------------------------------------------------------------
 
 #ifdef CPP_REMESHING
 #include <CGAL/Polygon_mesh_processing/remesh.h>

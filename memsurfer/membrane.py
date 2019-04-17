@@ -220,9 +220,12 @@ class Membrane(object):
     # --------------------------------------------------------------------------
     # compute density of points given by plabels
         # on every vertex
-    def estimate_density(self, sigma, name, normalize, labels=[]):
+    def estimate_density(self, type, sigma, name, normalize, labels=[]):
 
         nlabels = len(labels)
+
+        if type < 1 or type > 3:
+            raise InvalidArgument('Invalid density type, {}. Should be 1 (geodesic), 2 (2D) or 3 (3D)'.format(type))
 
         # if labels are not available
         if nlabels == 0 and self.labels.shape == (0,0):
@@ -230,7 +233,7 @@ class Membrane(object):
 
         # estimate density of all points
         if nlabels == 0:
-            self.properties[name] = self.mesh2.estimate_density(sigma, name, normalize, np.empty([0]))
+            self.properties[name] = self.mesh32.estimate_density(type, sigma, name, normalize, np.empty([0]))
             return
 
         # estimate density of a subset of points
@@ -239,7 +242,7 @@ class Membrane(object):
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         lidxs = np.where(np.in1d(self.labels, labels))[0]
-        self.properties[name] = self.mesh2.estimate_density(sigma, name, normalize, lidxs)
+        self.properties[name] = self.mesh32.estimate_density(type, sigma, name, normalize, lidxs)
 
     # --------------------------------------------------------------------------
     def write_all(self, outprefix, params={}):
@@ -284,6 +287,7 @@ class Membrane(object):
             params[key] = self.properties[key]
 
         self.mesh32.write_vtp(outprefix+'_membrane.vtp', params)
+        #self.mesh32.write_off("test.off")
 
     # --------------------------------------------------------------------------
     # A static method that computes and returns a membrane object
@@ -302,11 +306,15 @@ class Membrane(object):
         m.fit_surface()
         m.retriangulate(positions)
 
-        # compute properties on the membrane (mesh3 is the final mesh)
-        m.mesh3.need_normals()
-        m.mesh3.need_pointareas()
-        m.mesh3.need_curvatures()
+        # compute properties on the membrane
+        m.mesh32.need_normals()
+        m.mesh32.need_pointareas()
+        m.mesh32.need_curvatures()
         return m
 
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
+    @staticmethod
+    def compute_thickness(a, b):
+        a.properties['thickness'] = a.mesh32.estimate_distances(b.mesh32)
+        b.properties['thickness'] = b.mesh32.estimate_distances(a.mesh32)

@@ -23,6 +23,7 @@ For details, see https://github.com/LLNL/MemSurfer.
 #include "Types.hpp"
 
 class DensityKernel;        // kernel for density estimation
+class DistanceKernel;
 
 /// ---------------------------------------------------------------------------------------
 //!
@@ -65,7 +66,24 @@ protected:
     //! Collection of edges on the boundary
     std::vector<Edge> bedges;
 
+    //! geodesic distances
+
+//#define PDIST
+#ifndef PDIST
+    std::vector<std::vector<TypeFunction>> mgeodesics;
+#else
+    std::vector<TypeFunction> mgeodesics;
+#endif
+
+protected:
     /// ---------------------------------------------------------------------------------------
+
+    //static void compute_geodesics_cgal(const std::vector<Vertex> &mvertices, const std::vector<Face> &mfaces,
+    //                                    std::vector<std::vector<TypeFunction>> &mdistances, bool verbose = false);
+
+    static void compute_geodesics_fw(const std::vector<Vertex> &mvertices, const std::vector<Face> &mfaces,
+                                     const DistanceKernel &dist, std::vector<std::vector<TypeFunction>> &mdistances, bool verbose = false);
+
     static Point3 Point2Bary(const Point3 &p, const Point3 &a, const Point3 &b, const Point3 &c);
     static Point2 Bary2Point(const Point3 &bary, const Point2 &a, const Point2 &b, const Point2 &c);
 
@@ -176,8 +194,10 @@ public:
     const std::vector<TypeFunction>& need_pointareas(bool verbose = false);
 
     //! Compute density
-    const std::vector<TypeFunction>& kde(const DensityKernel& k, const std::string &name, bool verbose = false);
-    const std::vector<TypeFunction>& kde(const DensityKernel& k, const std::string &name, const std::vector<TypeIndexI> &ids, bool verbose = false);
+    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, bool verbose = false) {
+        return TriMesh::kde(type, k, name, std::vector<TypeIndexI>(), verbose);
+    }
+    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, const std::vector<TypeIndexI> &ids, bool verbose = false);
 
     //! Compute curvature (using vtk)
     std::vector<TypeFunction> need_curvature(bool verbose = false);             // TriMesh_vtk.cpp
@@ -187,10 +207,20 @@ public:
     std::vector<TypeFunction> parameterize_xy(bool verbose = false);
 
     //! project a set of points on the triangulation (using cgal)
-    std::vector<TypeFunction> project_on_surface(const std::vector<TypeFunction> &points, bool verbose = false);
+    std::vector<TypeFunction> project_on_surface(const std::vector<TypeFunction> &points, bool verbose = false) const;
 
+private:
+    std::vector<TypeFunction> project_on_surface(const std::vector<Point3> &points, bool verbose = false) const;
+
+public:
     //! compute the mesh as 2D Delaunay (using cgal)
     std::vector<TypeIndexI> delaunay(bool verbose = false);
+
+    //! compute the distance of "this" mesh from the "other" mesh
+    std::vector<TypeFunction> distance_to_other_mesh(const TriMesh &other, bool verbose=false) const;
+
+
+    void geodesic() const;
 
 #ifdef CPP_REMESHING
     //! Remesh
@@ -203,6 +233,7 @@ public:
     static bool write_off(const std::string &fname, const std::vector<Vertex> &get_vertices, const std::vector<Face> &get_faces, const uint8_t &dim, bool verbose = false);
 
     bool read_off(const std::string &fname, bool verbose = false) {
+        this->mDim = 3;
         return TriMesh::read_off(fname, mVertices, mFaces, verbose);
     }
     bool write_off(const std::string &fname, bool verbose = false) const {
@@ -308,10 +339,16 @@ public:
     }
 
     /// ---------------------------------------------------------------------------------------
+    std::vector<TypeFunction> distance_to_other_mesh(const TriMeshPeriodic &other) const {
+        return TriMesh::distance_to_other_mesh(other);
+    }
 
     std::vector<TypeIndexI> delaunay(bool verbose = false);
-    const std::vector<TypeFunction>& kde(const DensityKernel& k, const std::string &name, bool verbose = false);
-    const std::vector<TypeFunction>& kde(const DensityKernel& k, const std::string &name, const std::vector<TypeIndexI> &ids, bool verbose = false);
+
+    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, bool verbose = false) {
+        return TriMeshPeriodic::kde(type, k, name, std::vector<TypeIndexI>(), verbose);
+    }
+    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, const std::vector<TypeIndexI> &ids, bool verbose = false);
 };
 
 /// ---------------------------------------------------------------------------------------
