@@ -1,5 +1,5 @@
-## MemSurfer, Version 0.1
-#### Released: Jan 10, 2019
+## MemSurfer, Version 1.0
+#### Released: Apr 17, 2019
 
 ##### Author: Harsh Bhatia (hbhatia@llnl.gov) and Peer-Timo Bremer
 
@@ -70,7 +70,7 @@ source $SPACK_ROOT/spack/share/spack/setup-env.sh
   # Per-user settings (overrides default and site settings):
   #   ~/.spack/packages.yaml
   ```
-  In `package.yaml`, you need to specify two details: providers for MPI, and the available versions and corresponding paths. For example,
+  In `package.yaml`, you need to specify two details: providers for MPI, and the available versions and corresponding paths. For example, here we use `mvapich2`.
   ```
   packages:
     all:
