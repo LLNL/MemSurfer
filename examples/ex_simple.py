@@ -66,36 +66,36 @@ if __name__ == '__main__':
         m.fit_points_to_box_xy()
 
     # estimate point normals (using k nearest neighbors)
-    m.need_pnormals(knbrs)
+    m.compute_pnormals(knbrs)
 
     # fit an approximating surface to the points
-    m.fit_surface()
+    m.compute_approx_surface()
 
-    # project the points on the surface,
-    # and retriangulate the surface using only the projected points
-    # these do not have to be the same points.
-    # you may want to use a certain subset of the original points, or any other
-    # set of points, as long as the points are in the same bounding box
-    m.retriangulate(verts)
+    # compute the final membrane surfaces
+    m.compute_membrane_surface()
 
     # compute properties on the final mesh
-    m.mesh3.need_normals()
-    m.mesh3.need_pointareas()
-    m.mesh3.need_curvatures()
+    m.compute_properties('exact')
+    m.compute_properties('smooth')
+
+    # or, you can directly access the triangulation to compute what you want
+    '''
+    self.memb_smooth.compute_normals()
+    self.memb_smooth.compute_pointareas()
+    self.memb_smooth.compute_curvatures()
+    '''
 
     # --------------------------------------------------------------------------
     # estimate density of the points (all points, or selected on labels)
-    sigma = 0.2
-    name = 'density_{0}_k{1:.1f}'.format('label_1', sigma)
-    m.estimate_density(sigma, name, True, ['1'])
+    sigmas = [0.2]
 
-    name = 'density_{0}_k{1:.1f}'.format('all', sigma)
-    m.estimate_density(sigma, name, True)
+    memsurfer.Membrane.compute_densities([m], [2], sigmas, 'all')
+    memsurfer.Membrane.compute_densities([m], [2], sigmas, '1')
 
     # write the output
         # (required) a prefix for output files
         # (optional) a dictionary for any other parameters you may want to save
-    m.write(outprefix, {'frame': 0, 'time': 0.0})
+    m.write_all(outprefix, {'frame': 0, 'time': 0.0})
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------

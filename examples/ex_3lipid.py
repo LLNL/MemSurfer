@@ -165,28 +165,18 @@ if __name__ == '__main__':
         mb = memsurfer.Membrane.compute(bt.positions, bt.resnames, bbox, periodic)
 
         # compute total density
-        for sigma in [10,20,30,40]:
-            name = 'density_{0}_k{1:.1f}'.format('all', sigma)
-            mt.estimate_density(sigma, name, True)
-            mb.estimate_density(sigma, name, True)
+        sigmas = [10,20,30,40]
+        memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
+        
+        # compute density of each type of lipid
+        for l in lipids:
+            memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
 
-            # compute density of each type of lipid
-            for l in lipids:
-                tp_l = tp.select_atoms('resname {}'.format(l))
-                bt_l = bt.select_atoms('resname {}'.format(l))
-                LOGGER.info('lipid {}: upper = {}, lower = {}'.format(l, len(tp_l), len(bt_l)))
-
-                name = 'density_{0}_k{1:.1f}'.format(l, sigma)
-                mt.estimate_density(sigma, name, True, [l])
-                mb.estimate_density(sigma, name, True, [l])
-
-        mt.write(outprefix+'_f{}-top'.format(ts.frame),
+        mt.write_all(outprefix+'_f{}-top'.format(ts.frame),
                 {'frame': ts.frame, 'time': syst.trajectory.time})
 
-        mb.write(outprefix+'_f{}-bot'.format(ts.frame),
+        mb.write_all(outprefix+'_f{}-bot'.format(ts.frame),
                 {'frame': ts.frame, 'time': syst.trajectory.time})
-
-        exit()
 
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------

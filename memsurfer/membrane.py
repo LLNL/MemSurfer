@@ -184,9 +184,9 @@ class Membrane(object):
         (self.spoints, self.ppoints) = self.surf_poisson.project_on_surface_and_plane(self.points)
 
         # 3. create a 2D triangulation of the projected points
-        self.surf_planar = TriMesh(self.ppoints, periodic=self.periodic, label='surf_planar')
-        self.surf_approx = TriMesh(self.spoints, periodic=self.periodic, label='surf_approx')
-        self.surf_exact  = TriMesh(self.points,  periodic=self.periodic, label='surf_exact')
+        self.memb_planar = TriMesh(self.ppoints, periodic=self.periodic, label='memb_planar')
+        self.memb_smooth = TriMesh(self.spoints, periodic=self.periodic, label='memb_smooth')
+        self.memb_exact  = TriMesh(self.points,  periodic=self.periodic, label='memb_exact')
 
         if self.periodic:
 
@@ -194,42 +194,42 @@ class Membrane(object):
                 # that is the absolute maximum
             bb0 = self.surf_poisson.pverts.min(axis=0)
             bb1 = self.surf_poisson.pverts.max(axis=0)
-            self.surf_planar.set_bbox(bb0, bb1)
+            self.memb_planar.set_bbox(bb0, bb1)
 
             # bounding box of the points projected on the surface
             bb0 = self.spoints.min(axis=0)
             bb1 = self.spoints.max(axis=0)
-            self.surf_approx.set_bbox(bb0, bb1)
+            self.memb_smooth.set_bbox(bb0, bb1)
 
             # bounding box of the actual points
             bb0 = self.points.min(axis=0)
             bb1 = self.points.max(axis=0)
-            self.surf_exact.set_bbox(bb0, bb1)
+            self.memb_exact.set_bbox(bb0, bb1)
 
         # compute delaunay triangulation of the planar points
-        self.surf_planar.delaunay()
-        self.surf_approx.copy_triangulation(self.surf_planar)
-        self.surf_exact.copy_triangulation(self.surf_planar)
+        self.memb_planar.delaunay()
+        self.memb_smooth.copy_triangulation(self.memb_planar)
+        self.memb_exact.copy_triangulation(self.memb_planar)
 
         # ----------------------------------------------------------------------
         # change the bounding box of the planar surface
         if self.periodic:
             bb0 = self.ppoints.min(axis=0)
             bb1 = self.ppoints.max(axis=0)
-            self.surf_planar.set_bbox(bb0, bb1)
+            self.memb_planar.set_bbox(bb0, bb1)
 
     # --------------------------------------------------------------------------
-    def compute_properties(self, mtype='approx'):
+    def compute_properties(self, mtype='smooth'):
 
-        assert mtype == 'approx' or mtype == 'exact'
+        assert mtype == 'smooth' or mtype == 'exact'
         if mtype == 'exact':
-            self.surf_exact.compute_normals()
-            self.surf_exact.compute_pointareas()
-            self.surf_exact.compute_curvatures()
+            self.memb_exact.compute_normals()
+            self.memb_exact.compute_pointareas()
+            self.memb_exact.compute_curvatures()
         else:
-            self.surf_approx.compute_normals()
-            self.surf_approx.compute_pointareas()
-            self.surf_approx.compute_curvatures()
+            self.memb_smooth.compute_normals()
+            self.memb_smooth.compute_pointareas()
+            self.memb_smooth.compute_curvatures()
 
     # --------------------------------------------------------------------------
     # compute density of points given by plabels
@@ -247,7 +247,7 @@ class Membrane(object):
 
         # estimate density of all points
         if nlabels == 0:
-            self.properties[name] = self.surf_approx.compute_density(type, sigma, name, normalize, np.empty([0]))
+            self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, normalize, np.empty([0]))
             return
 
         # estimate density of a subset of points
@@ -256,19 +256,19 @@ class Membrane(object):
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         lidxs = np.where(np.in1d(self.labels, labels))[0]
-        self.properties[name] = self.surf_approx.compute_density(type, sigma, name, normalize, lidxs)
+        self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, normalize, lidxs)
 
     # --------------------------------------------------------------------------
     @staticmethod
-    def compute_thickness(a, b, mtype='approx'):
+    def compute_thickness(a, b, mtype='smooth'):
 
-        assert mtype == 'approx' or mtype == 'exact'
+        assert mtype in ['smooth', 'exact']
         if mtype == 'exact':
-            a.properties['thickness'] = a.surf_exact.compute_distance_to_surface(b.surf_exact)
-            b.properties['thickness'] = b.surf_exact.compute_distance_to_surface(a.surf_exact)
+            a.properties['thickness'] = a.memb_exact.compute_distance_to_surface(b.memb_exact)
+            b.properties['thickness'] = b.memb_exact.compute_distance_to_surface(a.memb_exact)
         else:
-            a.properties['thickness'] = a.surf_approx.compute_distance_to_surface(b.surf_approx)
-            b.properties['thickness'] = b.surf_approx.compute_distance_to_surface(a.surf_approx)
+            a.properties['thickness'] = a.memb_smooth.compute_distance_to_surface(b.memb_smooth)
+            b.properties['thickness'] = b.memb_smooth.compute_distance_to_surface(a.memb_smooth)
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -300,7 +300,7 @@ class Membrane(object):
 
         # compute properties on the membrane
         m.compute_properties('exact')
-        m.compute_properties('approx')
+        m.compute_properties('smooth')
         return m
 
     # --------------------------------------------------------------------------
@@ -322,14 +322,14 @@ class Membrane(object):
         for key in self.properties.keys():
             params[key] = self.properties[key]
 
-        #self.surf_exact.faces = self.surf_approx.faces
-        self.surf_planar.write_vtp(outprefix+'_planar.vtp', params)
-        self.surf_exact.write_vtp(outprefix+'_membrane_exact.vtp', params)
-        self.surf_approx.write_vtp(outprefix+'_membrane_approx.vtp', params)
+        #self.memb_exact.faces = self.memb_smooth.faces
+        self.memb_planar.write_vtp(outprefix+'_planar.vtp', params)
+        self.memb_exact.write_vtp(outprefix+'_membrane_exact.vtp', params)
+        self.memb_smooth.write_vtp(outprefix+'_membrane_smooth.vtp', params)
 
-        #self.surf_planar.tmesh.write_binary(outprefix+'_mesh2.bin')
-        #self.surf_exact.tmesh.write_binary(outprefix+'_mesh3.bin')
-        #self.surf_approx.tmesh.write_binary(outprefix+'_mesh32.bin')
+        #self.memb_planar.tmesh.write_binary(outprefix+'_mesh2.bin')
+        #self.memb_exact.tmesh.write_binary(outprefix+'_mesh3.bin')
+        #self.memb_smooth.tmesh.write_binary(outprefix+'_mesh32.bin')
 
     def write(self, outprefix, params={}):
 
@@ -347,8 +347,8 @@ class Membrane(object):
         for key in self.properties.keys():
             params[key] = self.properties[key]
 
-        self.surf_approx.write_vtp(outprefix+'_membrane.vtp', params)
-        #self.surf_approx.write_off("test.off")
+        self.memb_smooth.write_vtp(outprefix+'_membrane.vtp', params)
+        #self.memb_smooth.write_off("test.off")
 
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
