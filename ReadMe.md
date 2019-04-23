@@ -195,7 +195,7 @@ $ export VTK_ROOT=$PATH_DEP
 $ export CGAL_ROOT=$PATH_DEP
 $ export EIGEN_ROOT=$PATH_DEP
 
-$ git clone --recursive https://github.com/LLNL/MemSurfer.git
+$ git clone --recursive git@github.com:LLNL/MemSurfer.git
 $ cd MemSurfer
 $ python setup.py install
 ```
