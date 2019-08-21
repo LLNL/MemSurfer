@@ -18,9 +18,9 @@ LOGGER = logging.getLogger(__name__)
 
 from pypoisson import poisson_reconstruction
 
-import pymemsurfer
-from trimesh import TriMesh
-from utils import Timer
+from . import pymemsurfer
+from .trimesh import TriMesh
+from .utils import Timer
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
@@ -53,17 +53,17 @@ class Membrane(object):
         self.periodic = kwargs.get('periodic', False)
         if self.periodic:
             self.blayer = kwargs.get('boundary_layer', 0.2)
-            if 'bbox' not in kwargs.keys():
+            if 'bbox' not in list(kwargs.keys()):
                 raise ValueError('Periodic membrane needs 3D bounding box: ndarray (2 ,3)')
 
         # bounding box may be not given, but is needed for periodicity
-        if 'bbox' in kwargs.keys():
+        if 'bbox' in list(kwargs.keys()):
             self.bbox = kwargs['bbox']
             if self.bbox.shape[0]!= 2 and self.bbox.shape[1] != 3:
                 raise ValueError('Membrane needs 3D bounding box: ndarray (2 ,3)')
 
         # labels for points
-        if 'labels' in kwargs.keys():
+        if 'labels' in list(kwargs.keys()):
             self.labels = kwargs['labels']
             if self.labels.shape[0] != self.npoints or len(self.labels.shape) > 1:
                 raise ValueError('Membrane expects one label per point')
@@ -72,7 +72,7 @@ class Membrane(object):
 
         LOGGER.info('Initializing Membrane with {} points'.format(self.points.shape))
         LOGGER.info('\t actual bbox   = {} {}'.format(self.points.min(axis=0),self.points.max(axis=0)))
-        if self.periodic  and 'bbox' in kwargs.keys():
+        if self.periodic  and 'bbox' in list(kwargs.keys()):
             LOGGER.info('\t given periodic bbox = {} {}'.format(self.bbox[0], self.bbox[1]))
 
         # create point set object
@@ -91,7 +91,7 @@ class Membrane(object):
         '''
         nadjusted = 0
         boxw = self.bbox[1,:] - self.bbox[0,:]
-        for d in xrange(2):
+        for d in range(2):
 
             l = np.where(self.points[:,d] < self.bbox[0,d])[0]
             if l.shape[0] > 0:
@@ -309,7 +309,7 @@ class Membrane(object):
     # --------------------------------------------------------------------------
     def write_all(self, outprefix, params={}):
 
-        from utils import write2vtkpolydata
+        from .utils import write2vtkpolydata
 
         pparams = {'normals': self.pnormals}
         if self.labels.shape != (0,0):
@@ -321,7 +321,7 @@ class Membrane(object):
         if self.labels.shape != (0,0):
             params['labels'] = self.labels
 
-        for key in self.properties.keys():
+        for key in list(self.properties.keys()):
             params[key] = self.properties[key]
 
         #self.memb_exact.faces = self.memb_smooth.faces
@@ -335,7 +335,7 @@ class Membrane(object):
 
     def write(self, outprefix, params={}):
 
-        from utils import write2vtkpolydata
+        from .utils import write2vtkpolydata
 
         pparams = {'normals': self.pnormals}
         if self.labels.shape != (0,0):
@@ -346,7 +346,7 @@ class Membrane(object):
         if self.labels.shape != (0,0):
             params['labels'] = self.labels
 
-        for key in self.properties.keys():
+        for key in list(self.properties.keys()):
             params[key] = self.properties[key]
 
         self.memb_smooth.write_vtp(outprefix+'_membrane.vtp', params)

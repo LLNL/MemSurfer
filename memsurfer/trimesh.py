@@ -16,8 +16,8 @@ import numpy as np
 import logging
 LOGGER = logging.getLogger(__name__)
 
-import pymemsurfer
-from utils import Timer
+from . import pymemsurfer
+from .utils import Timer
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
@@ -52,7 +52,7 @@ class TriMesh(object):
             self.label = kwargs.get('label', 'TriMesh')
 
         self.nfaces = 0
-        if 'faces' in kwargs.keys():
+        if 'faces' in list(kwargs.keys()):
             self.faces = kwargs['faces']
             self.faces = self.faces.astype(np.uint32)
             self.nfaces = self.faces.shape[0]
@@ -155,10 +155,10 @@ class TriMesh(object):
         spoints = np.zeros((npoints, 3), dtype=np.float32)
         ppoints = np.zeros((npoints, 2), dtype=np.float32)
 
-        for i in xrange(npoints):
+        for i in range(npoints):
 
             f = self.faces[fids[i]]
-            for j in xrange(3):
+            for j in range(3):
 
                 spoints[i] += fbarys[i][j] * self.vertices[f[j]]
                 ppoints[i] += fbarys[i][j] * self.pverts[f[j]]
@@ -276,7 +276,7 @@ class TriMesh(object):
         self.mean_curv = np.zeros(self.nverts,)
         self.gaus_curv = np.zeros(self.nverts,)
 
-        for i in xrange(self.nverts):
+        for i in range(self.nverts):
             self.mean_curv[i] = rval[i]
             self.gaus_curv[i] = rval[self.nverts + i]
 
@@ -374,7 +374,7 @@ class TriMesh(object):
             if self.gaus_curv.shape != (0,):
                 properties['gaus_curv'] = append_dups(self.gaus_curv, dids)
 
-        from utils import write2vtkpolydata
+        from .utils import write2vtkpolydata
         if self.periodic:
             properties['bbox'] = self.boxw
         write2vtkpolydata(filename, verts, properties)
@@ -382,7 +382,7 @@ class TriMesh(object):
     # --------------------------------------------------------------------------
     def write_off(self, filename):
 
-        from utils import write_off
+        from .utils import write_off
 
         verts = self.vertices
         faces = self.faces
@@ -397,7 +397,7 @@ class TriMesh(object):
     # --------------------------------------------------------------------------
     def write_ply(self, filename):
 
-        from utils import write_off
+        from .utils import write_off
 
         verts = self.vertices
         faces = self.faces

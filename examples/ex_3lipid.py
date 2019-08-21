@@ -86,10 +86,6 @@ if __name__ == '__main__':
     # Use a lipid master list to identify headgrups
     lipidTypeList = lipid_masterlist()
 
-    # Select atoms at pos 3 - to speadup order calculation - these are global
-    pos2atoms = syst.select_atoms('name C2B C2A D2B D2A')
-    pos3atoms = syst.select_atoms('name C3B C3A D3B D3A')
-
     # Get list of all suported lipid types
     lipidTypeNames = np.array([l[0] for l in lipidTypeList])
 
@@ -105,8 +101,9 @@ if __name__ == '__main__':
         lipidTypeDic[lipidTypeNames[i]] = LipidType(lipidTypeList[i], syst)
 
     # Get beads that define the heads of all flip-flopping none leaflet defining lipids
-    defFlipFlopHeadgroups = MDAnalysis.core.AtomGroup.AtomGroup([])
-    for i in lipidTypeDic.values():
+    defFlipFlopHeadgroups = MDAnalysis.core.groups.AtomGroup([], syst)
+
+    for i in list(lipidTypeDic.values()):
         defFlipFlopHeadgroups += i.getNoneLeafletSelection(syst)
 
     LOGGER.info('FlipFlopHeadgroups = {}'.format(defFlipFlopHeadgroups))
@@ -116,8 +113,8 @@ if __name__ == '__main__':
 
     # Get beads that define the bilayer leaflets
     # (not in bilayer middle, but closly packed, use linker + first tail bead of lipids that do not flip-flop)
-    defHeadgroups = MDAnalysis.core.AtomGroup.AtomGroup([])
-    for i in lipidTypeDic.values():
+    defHeadgroups = MDAnalysis.core.groups.AtomGroup([], syst)
+    for i in list(lipidTypeDic.values()):
         defHeadgroups += i.getLeafletSelection(syst)
 
     # get leaflets
@@ -143,7 +140,7 @@ if __name__ == '__main__':
     # Compute membranes for all frames
     for i in selFrame:
 
-        print '\n'
+        print('\n')
         # Select frame 0 to len(syst)
         ts = syst.trajectory[i]
         LOGGER.info('Frame: %5d, Time: %8.3f ps' % (ts.frame, syst.trajectory.time))
@@ -167,19 +164,14 @@ if __name__ == '__main__':
         mb = memsurfer.Membrane.compute(bt.positions, bt.resnames, bbox, periodic)
 
         # compute total density
-        sigmas = [10] #,20,30,40]
-        memsurfer.Membrane.compute_densities([mt, mb], [2], 
-            sigmas, 'all')
+        sigmas = [10,20,30,40]
+        memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
 
-        if False:   # local testing
-            pass
-            #mt.memb_smooth.write_binary(os.path.join(ddir, "tfile.bin"), 'density')
-            #mb.memb_smooth.write_binary(os.path.join(ddir, "bfile.bin"), 'density')
+        # compute density of each type of lipid
+        for l in lipids:
+            memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
 
-            #mt.memb_smooth.write_vtp(os.path.join(ddir, "tfile.vtp"), {})
-            #mb.memb_smooth.write_vtp(os.path.join(ddir, "bfile.vtp"), {})
-
-        else:
+        if True:
             # compute density of each type of lipid
             mt.write_all(outprefix+'_f{}-top'.format(ts.frame),
                     {'frame': ts.frame, 'time': syst.trajectory.time})

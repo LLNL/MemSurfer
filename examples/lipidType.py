@@ -24,13 +24,13 @@ class LipidType():
             #return syst.select_atoms("resname %s and name %s" % (self.ldef[0], self.getHeadBeads()))
             return self.syst.select_atoms("resname %s and name %s" % (self.ldef[0], self.ldef[9]))
         else:
-            return MDAnalysis.core.AtomGroup.AtomGroup([])
+            return MDAnalysis.core.groups.AtomGroup([], syst)
 
     def getNoneLeafletSelection(self, syst):
         if self.ldef[1] == 1:
             return self.syst.select_atoms("resname %s and name %s" % (self.ldef[0], self.ldef[9]))
         else:
-            return MDAnalysis.core.AtomGroup.AtomGroup([])
+            return MDAnalysis.core.groups.AtomGroup([], syst)
 
     def getTailBeads(self):
         # ldef[8] is the bonded list

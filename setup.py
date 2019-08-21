@@ -63,10 +63,10 @@ def choose_path(root, libname):
 SRC_PATH = os.path.split(os.path.abspath(sys.argv[0]))[0]
 VTK_ROOT, CGAL_ROOT, EIGEN_ROOT, BOOST_ROOT = read_paths(os.path.join(SRC_PATH, 'external'))
 
-print '--- vtk', VTK_ROOT
-print '--- cgal', CGAL_ROOT
-print '--- boost', BOOST_ROOT
-print '--- eigen', EIGEN_ROOT
+print('--- vtk', VTK_ROOT)
+print('--- cgal', CGAL_ROOT)
+print('--- boost', BOOST_ROOT)
+print('--- eigen', EIGEN_ROOT)
 
 # cgal gets installed in lib or lib64
 CGAL_lpath = choose_path(CGAL_ROOT, 'libCGAL')
@@ -125,7 +125,8 @@ ext_pp = Extension('pypoisson', pp_sources,
                    language='c++',
                    include_dirs = [numpy.get_include()],
                    extra_compile_args = ['-w','-fopenmp'],
-                   extra_link_args=['-fopenmp']
+                   extra_link_args=['-fopenmp'],
+                   define_macros = [('__linux__', '1')] # todo: need to add for mac
                   )
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------

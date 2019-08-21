@@ -12,4 +12,4 @@ For details, see https://github.com/LLNL/MemSurfer.
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 
-from membrane import Membrane
+from .membrane import Membrane

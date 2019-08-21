@@ -31,7 +31,7 @@ class Timer(object):
 
         self.etime = timeit.default_timer()
         if print_time:
-            print self
+            print(self)
 
     def __str__(self):
 
@@ -218,7 +218,7 @@ def write2vtkpolydata(filename, verts, properties):
     points = vtk.vtkPoints()
     cells = vtk.vtkCellArray()
 
-    if 'bbox' in properties.keys():
+    if 'bbox' in list(properties.keys()):
         box = 0.5*properties['bbox']
         trim_box = True
     else:
@@ -231,7 +231,7 @@ def write2vtkpolydata(filename, verts, properties):
     polydata.SetPoints(points)
 
     # --------------------------------------------------------------------------
-    if 'faces' in properties.keys():
+    if 'faces' in list(properties.keys()):
         faces = properties['faces']
         #fid = 0
         for f in faces:
@@ -239,7 +239,7 @@ def write2vtkpolydata(filename, verts, properties):
 
             is_periodic = False
 
-            for i in xrange(3):
+            for i in range(3):
                 cell.GetPointIds().SetId(i, f[i])
 
                 if trim_box:
@@ -256,7 +256,7 @@ def write2vtkpolydata(filename, verts, properties):
         polydata.SetPolys(cells)
 
     # --------------------------------------------------------------------------
-    for key in properties.keys():
+    for key in list(properties.keys()):
         if key == 'faces' or key == 'bbox':
             continue
 
@@ -264,10 +264,16 @@ def write2vtkpolydata(filename, verts, properties):
         if not isinstance(data, np.ndarray):
             data = np.array([data])
 
-        if data.dtype.type is np.string_:
-            uvals, data = np.unique(data, return_inverse=True)
+        if key == 'labels':
+            nvals = data.shape[0]
+            VTK_data = vtk.vtkStringArray()
+            VTK_data.SetNumberOfValues(nvals)
+            for i in range(nvals):
+                VTK_data.SetValue(i, str(data[i]))
 
-        VTK_data = numpy_support.numpy_to_vtk(num_array=data)
+        else:
+            VTK_data = numpy_support.numpy_to_vtk(num_array=data)
+
         VTK_data.SetName(key)
 
         if data.shape[0] == 1:
@@ -280,8 +286,8 @@ def write2vtkpolydata(filename, verts, properties):
             polydata.GetCellData().AddArray(VTK_data)
 
     # --------------------------------------------------------------------------
-    if 'faces' not in properties.keys():
-        for i in xrange(len(verts)):
+    if 'faces' not in list(properties.keys()):
+        for i in range(len(verts)):
             cell = vtk.vtkVertex()
             cell.GetPointIds().SetId(0, i)
             cells.InsertNextCell(cell)
