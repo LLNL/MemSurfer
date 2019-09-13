@@ -2,8 +2,9 @@
 build*
 *user
 
-memsurfer/pysurfer.py
-memsurfer/pysurfer_wrap.cpp
+memsurfer.egg-info/
+memsurfer/pymemsurfer.py
+memsurfer/pymemsurfer_wrap.cpp
 *.pyc
 
 *vtp

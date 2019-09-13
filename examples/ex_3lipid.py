@@ -17,6 +17,9 @@ import argparse
 import logging
 LOGGER = logging.getLogger(__name__)
 
+import memsurfer
+from memsurfer import utils
+
 import MDAnalysis
 from MDAnalysis.analysis.distances import distance_array
 from MDAnalysis.analysis.leaflet import LeafletFinder, optimize_cutoff
@@ -24,16 +27,13 @@ from MDAnalysis.analysis.leaflet import LeafletFinder, optimize_cutoff
 import mdreader
 from lipidType import *
 
-import memsurfer
-from memsurfer import utils
-
 # ------------------------------------------------------------------------------
 # This example script demonstrates how MemSurfer can be used to compute
 # membrane surfaces.
 # ------------------------------------------------------------------------------
 if __name__ == '__main__':
 
-    print 'using memsurfer from', memsurfer.__file__
+    print ('using memsurfer from ({})'.format(memsurfer.__file__))
 
     # --------------------------------------------------------------------------
     # Path to input data.
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     for i in list(lipidTypeDic.values()):
         defFlipFlopHeadgroups += i.getNoneLeafletSelection(syst)
 
-    LOGGER.info('FlipFlopHeadgroups = {}'.format(defFlipFlopHeadgroups))
+    #LOGGER.info('FlipFlopHeadgroups = {}'.format(defFlipFlopHeadgroups))
 
     # --------------------------------------------------------------------------
     # Define top/bottom leaflets

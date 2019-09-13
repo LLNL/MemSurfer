@@ -24,6 +24,8 @@ from memsurfer import utils
 # ------------------------------------------------------------------------------
 if __name__ == '__main__':
 
+    print ('using memsurfer from ({})'.format(memsurfer.__file__))
+
     ddir = './data'
     filename = os.path.join(ddir, 'noisy.off')
 
