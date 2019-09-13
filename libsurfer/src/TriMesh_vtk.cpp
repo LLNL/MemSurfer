@@ -14,7 +14,6 @@ For details, see https://github.com/LLNL/MemSurfer.
 /// ----------------------------------------------------------------------------
 
 #include "TriMesh.hpp"
-#include "DensityEstimation.hpp"
 
 #ifdef VTK_AVAILABLE
 #include "vtkPolyData.h"
@@ -34,8 +33,8 @@ For details, see https://github.com/LLNL/MemSurfer.
 std::vector<TypeFunction> TriMesh::need_curvature(bool verbose) {
 
 #ifndef VTK_AVAILABLE
-    std::cerr << " ERROR: TriMesh::need_curvature - VTK not available! cannot compute curvatures!\n";
-    return std::vector<TypeFunction>();
+    std::cerr << " ERROR: " << this->tag() << "::need_curvature - VTK not available! cannot compute curvatures!\n";
+    return std::vector<TypeFunction>;
 #else
 
     const size_t nverts = mVertices.size();
@@ -43,7 +42,7 @@ std::vector<TypeFunction> TriMesh::need_curvature(bool verbose) {
     if (mFields.find("curv_mean") == mFields.end()) {
 
         if (verbose) {
-            std::cout << "   > TriMesh::need_curvature...";
+            std::cout << "   > " << this->tag() << "::need_curvature...";
             fflush(stdout);
         }
 
@@ -113,10 +112,10 @@ std::vector<TypeFunction> TriMesh::need_curvature(bool verbose) {
 bool TriMesh::write_vtp(const std::string &fname) {
 
 #ifndef VTK_AVAILABLE
-    std::cerr << " ERROR: TriMesh::write_vtp - VTK not available!\n";
+    std::cerr << " ERROR: " << this->tag() << "::write_vtp - VTK not available!\n";
     return false;
 #else
-    std::cout << "   > TriMesh::write_vtp("<<fname<<")...";
+    std::cout << "   > " << this->tag() << "::write_vtp("<<fname<<")...";
     fflush(stdout);
 
     vtkSmartPointer<vtkPolyData> surface = vtkSmartPointer<vtkPolyData>::New();

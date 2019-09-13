@@ -20,8 +20,6 @@ For details, see https://github.com/LLNL/MemSurfer.
 #include "TriMesh.hpp"
 #include "DensityEstimation.hpp"
 
-
-
 #ifdef PDIST
 size_t square_to_condensed(const size_t &i, const size_t &j, const size_t &n) {
     if (i == j) {
@@ -336,8 +334,14 @@ void TriMesh::compute_geodesics_fw(const std::vector<Vertex> &mvertices, const s
 //! density estimation (core function)
 /// -----------------------------------------------------------------------------
 
+void normalize(std::vector<TypeFunction> &_, const size_t n) {
+    const TypeFunction sm = std::accumulate(_.begin(), _.end(), TypeFunction(0));
+    std::transform(_.begin(), _.end(), _.begin(),
+               std::bind(std::multiplies<TypeFunction>(), std::placeholders::_1, TypeFunction(n)/sm));
+}
+
 void kde_2d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &ids,
-            const DensityKernel& k, const DistanceKernel &dist,
+            const DensityKernel& k, const DistanceKernel &dist, bool do_normalize,
             std::vector<TypeFunction> &density) {
 
     const size_t nids = ids.size();
@@ -363,10 +367,13 @@ void kde_2d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &
             density[j] += tmp;
         }}
     }
+
+    if (do_normalize)
+      normalize(density, nids==0 ? nverts : nids);
 }
 
 void kde_3d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &ids,
-            const DensityKernel& k, const DistanceKernel &dist,
+            const DensityKernel& k, const DistanceKernel &dist, bool do_normalize,
             std::vector<TypeFunction> &density) {
 
     const size_t nids = ids.size();
@@ -394,10 +401,13 @@ void kde_3d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &
             density[j] += tmp;
         }}
     }
+
+    if (do_normalize)
+      normalize(density, nids==0 ? nverts : nids);
 }
 
 void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
-            const DensityKernel& k,
+            const DensityKernel& k, bool do_normalize,
 #ifdef PDIST
             const std::vector<TypeFunction> &distances,
 #else
@@ -440,94 +450,69 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
             density[j] += tmp;
         }}
     }
+
+    if (do_normalize)
+      normalize(density, nids==0 ? nverts : nids);
 }
 
 /// -----------------------------------------------------------------------------
 //! density estimation for nonperiodic mesh
 /// -----------------------------------------------------------------------------
 
-const std::vector<TypeFunction>& TriMesh::kde(const int &type, const DensityKernel& k, const std::string &name,
-                                              const std::vector<TypeIndexI> &ids, bool verbose) {
+const std::vector<TypeFunction>&
+    TriMesh::kde(const int &type, const DensityKernel& k, const std::string &name,
+                 const std::vector<TypeIndexI> &ids,
+                 const bool& do_normalize, bool verbose) {
 
     if (type < 1 || type > 3) {
-        std::cout << "   > " << this->mName << "::kde(" << type << ">): invalid distance type!\n";
+        std::cout << "   > " << this->tag() << "::kde(" << type << ">): invalid distance type!\n";
         exit(1);
     }
 
     // this name already exists in the map!
     if (mFields.find(name) != mFields.end()) {
         if (verbose){
-            std::cout << " " << this->mName << "::kde("<<name<<") got an already used name. Returning existing field!\n";
+            std::cout << " " << this->tag() << "::kde("<<name<<") got an already used name. Returning existing field!\n";
         }
         return mFields.at(name);
     }
 
     if (verbose){
-        std::cout << "   > " << this->mName << "::kde(<" << ids.size() << ">, "<<name<<")...";
+        std::cout << "   > " << this->tag() << "::kde(<" << ids.size() << ">, "<<name<<")...";
         fflush(stdout);
     }
 
-    DistanceSquared dist;
-    if (type == 1) {
-        if (mgeodesics.empty()) {
-            compute_geodesics_fw(this->mVertices, this->mFaces, dist, this->mgeodesics, verbose);
+    if (!this->mPeriodic) {
+        DistanceSquared dist;
+        if (type == 1) {
+            if (mgeodesics.empty()) {
+                compute_geodesics_fw(this->mVertices, this->mFaces, dist, this->mgeodesics, verbose);
+            }
+            kde_2m(this->mVertices.size(), ids, k, do_normalize, this->mgeodesics, mFields[name]);
         }
-        kde_2m(this->mVertices.size(), ids, k, this->mgeodesics, mFields[name]);
-    }
-    else if (type == 2) {
-        kde_2d(mVertices, ids, k, dist, mFields[name]);
+        else if (type == 2) {
+            kde_2d(mVertices, ids, k, dist, do_normalize, mFields[name]);
+        }
+        else {
+            kde_3d(mVertices, ids, k, dist, do_normalize, mFields[name]);
+        }
     }
     else {
-        kde_3d(mVertices, ids, k, dist, mFields[name]);
-    }
-
-    if(verbose){
-        printf(" Done!\n");
-    }
-    return mFields.at(name);
-}
-
-
-
-/// -----------------------------------------------------------------------------
-//! density estimation for periodic mesh using a subset of vertices
-/// -----------------------------------------------------------------------------
-
-const std::vector<TypeFunction>& TriMeshPeriodic::kde(const int &type, const DensityKernel& k, const std::string &name,
-                                                      const std::vector<TypeIndexI> &ids, bool verbose) {
-
-    if (type < 1 || type > 3) {
-        std::cout << "   > " << this->mName << "::kde(" << type << ">): invalid distance type!\n";
-        exit(1);
-    }
-
-    // this name already exists in the map!
-    if (mFields.find(name) != mFields.end()) {
-        if (verbose){
-            std::cout << " " << this->mName << "::kde("<<name<<") got an already used name. Returning existing field!\n";
+        DistancePeriodicXYSquared dist(mBox0, mBox1);
+        if (type == 1) {
+            if (mgeodesics.empty()) {
+                std::vector<Face> mfaces = this->mFaces;
+                mfaces.insert(mfaces.end(), this->mPeriodicFaces.begin(), this->mPeriodicFaces.end());
+                compute_geodesics_fw(this->mVertices, mfaces, dist, this->mgeodesics, verbose);
+            }
+            kde_2m(this->mVertices.size(), ids, k, do_normalize, this->mgeodesics, mFields[name]);
         }
-        return mFields.at(name);
-    }
-
-    if (verbose){
-        std::cout << "   > " << this->mName << "::kde(<" << ids.size() << ">, "<<name<<")...";
-        fflush(stdout);
-    }
-
-    DistancePeriodicXYSquared dist(mBox0, mBox1);
-    if (type == 1) {
-        if (mgeodesics.empty()) {
-            std::vector<Face> mfaces = this->mFaces;
-            mfaces.insert(mfaces.end(), this->mPeriodicFaces.begin(), this->mPeriodicFaces.end());
-            compute_geodesics_fw(this->mVertices, mfaces, dist, this->mgeodesics, verbose);
+        else if (type == 2) {
+            kde_2d(mVertices, ids, k, dist, do_normalize, mFields[name]);
         }
-        kde_2m(this->mVertices.size(), ids, k, this->mgeodesics, mFields[name]);
-    }
-    else if (type == 2) {
-        kde_2d(mVertices, ids, k, dist, mFields[name]);
-    }
-    else {
-        kde_3d(mVertices, ids, k, dist, mFields[name]);
+        else {
+            kde_3d(mVertices, ids, k, dist, do_normalize, mFields[name]);
+        }
     }
 
     if(verbose){

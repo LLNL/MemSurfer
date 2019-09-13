@@ -17,6 +17,7 @@ For details, see https://github.com/LLNL/MemSurfer.
 #include <fstream>
 #include <stdexcept>
 #include <algorithm>
+#include <unordered_set>
 
 #include "TriMesh.hpp"
 
@@ -57,9 +58,36 @@ bool TriMesh::set_dimensionality(uint8_t _) {
     mDim = _;
     if (mDim != 2 && mDim != 3) {
         std::ostringstream errMsg;
-        errMsg << " TriMesh::TriMesh(): Invalid dimensionality of vertices! can only be 2 or 3, but got " << int(mDim) << std::endl;
+        errMsg << " " << this->tag() << "::set_dimensionality(): Invalid dimensionality of vertices! can only be 2 or 3, but got " << int(mDim) << std::endl;
         throw std::invalid_argument(errMsg.str());
     }
+    return true;
+}
+
+bool TriMesh::set_bbox(float *_, int n) {
+
+    if (n == 2 && this->mDim == 2) {
+        this->mBox0 = Vertex(0, 0, 0);
+        this->mBox1 = Vertex(_[0], _[1], 0);
+    }
+    else if (n == 3 && this->mDim == 3) {
+        this->mBox0 = Vertex(0, 0, 0);
+        this->mBox1 = Vertex(_[0], _[1], _[2]);
+    }
+    else if (n == 4 && this->mDim == 2) {
+        this->mBox0 = Vertex(_[0], _[1], 0);
+        this->mBox1 = Vertex(_[2], _[3], 0);
+    }
+    else if (n == 6 && this->mDim == 3) {
+        this->mBox0 = Vertex(_[0], _[1], _[2]);
+        this->mBox1 = Vertex(_[3], _[4], _[5]);
+    }
+    else {
+        std::ostringstream errMsg;
+        errMsg << " " << this->tag() << "::set_bbox(): Invalid bounding box! got " << n << " values for " << int(this->mDim) << "D" << std::endl;
+        throw std::invalid_argument(errMsg.str());
+    }
+    bbox_valid = true;
     return true;
 }
 
@@ -354,7 +382,7 @@ std::vector<TypeIndexI> TriMesh::need_boundary(bool verbose) {
                 //std::cout <<" failed for " << bidx << " : " <<bedges[bidx] << std::endl;
 
                 std::ostringstream errMsg;
-                errMsg << " TriMesh::need_boundary(): Could not CCW orient edges! returning possibly unoriented edges! (does the boundary have multiple components?)\n";
+                errMsg << " " << this->tag() << "::need_boundary(): Could not CCW orient edges! returning possibly unoriented edges! (does the boundary have multiple components?)\n";
                 std::cerr << errMsg.str();
                 //throw std::invalid_argument(errMsg.str());
 
@@ -372,47 +400,26 @@ std::vector<TypeIndexI> TriMesh::need_boundary(bool verbose) {
     return linearize<2,TypeIndex,TypeIndexI>(bedges, 2);
 }
 #endif
+
 //! -----------------------------------------------------------------------------
 //! Periodic Mesh
 //! -----------------------------------------------------------------------------
 
-bool TriMeshPeriodic::set_bbox(float *_, int n) {
-
-    if (n == 2 && this->mDim == 2) {
-        this->mBox0 = Vertex(0, 0, 0);
-        this->mBox1 = Vertex(_[0], _[1], 0);
-    }
-    else if (n == 3 && this->mDim == 3) {
-        this->mBox0 = Vertex(0, 0, 0);
-        this->mBox1 = Vertex(_[0], _[1], _[2]);
-    }
-    else if (n == 4 && this->mDim == 2) {
-        this->mBox0 = Vertex(_[0], _[1], 0);
-        this->mBox1 = Vertex(_[2], _[3], 0);
-    }
-    else if (n == 6 && this->mDim == 3) {
-        this->mBox0 = Vertex(_[0], _[1], _[2]);
-        this->mBox1 = Vertex(_[3], _[4], _[5]);
-    }
-    else {
-        std::ostringstream errMsg;
-        errMsg << " TriMeshPeriodic::set_bbox(): Invalid periodic box! got " << n << " values for " << int(this->mDim) << "D" << std::endl;
-        throw std::invalid_argument(errMsg.str());
-    }
-    bbox_valid = true;
-    return true;
-}
-
-bool TriMeshPeriodic::wrap_vertices(uint8_t dim) {
+bool TriMesh::wrap_vertices(uint8_t dim) {
 
     if (dim < 1 || dim > this->mDim) {
         std::ostringstream errMsg;
-        errMsg << " TriMeshPeriodic::wrap_vertices("<<int(dim)<<"): Invalid dim specified for " << int(mDim) << "D vertices!" << std::endl;
+        errMsg << " " << this->tag() << "::wrap_vertices("<<int(dim)<<"): Invalid dim specified for " << int(mDim) << "D vertices!" << std::endl;
         throw std::logic_error(errMsg.str());
     }
-    if (!bbox_valid) {
+    if (!this->mPeriodic) {
         std::ostringstream errMsg;
-        errMsg << " TriMeshPeriodic::wrap_vertices("<<int(dim)<<"): Bounding box not available!" << std::endl;
+        errMsg << " " << this->tag() << "::wrap_vertices(): Mesh is not periodic!" << std::endl;
+        throw std::invalid_argument(errMsg.str());
+    }
+    if (!this->bbox_valid) {
+        std::ostringstream errMsg;
+        errMsg << " " << this->tag() << "::wrap_vertices("<<int(dim)<<"): Bounding box not available!" << std::endl;
         throw std::logic_error(errMsg.str());
     }
 
@@ -429,6 +436,88 @@ bool TriMeshPeriodic::wrap_vertices(uint8_t dim) {
     return true;
 }
 
+void TriMesh::trim_periodicDelaunay(bool verbose) {
+
+    if (!this->mPeriodic) {
+        std::ostringstream errMsg;
+        errMsg << " " << this->tag() << "::lift_delaunay(): Mesh is not periodic!" << std::endl;
+        throw std::invalid_argument(errMsg.str());
+    }
+
+    this->mFaces.clear();
+    this->mPeriodicFaces.clear();
+    this->mTrimmedFaces.clear();
+    this->mDuplicateVerts.clear();
+    this->mDuplicateVertex_periodic.clear();
+
+    if (verbose) {
+        std::cout << "   > " << tag() << "::lift_delaunay()...";
+        fflush(stdout);
+    }
+
+    const size_t noverts = this->mVertices.size();
+    const size_t ndfaces = this->mDelaunayFaces.size();
+    const Vertex boxw = mBox1 - mBox0;
+
+    for(size_t i = 0; i < ndfaces; i++) {
+
+        const std::vector<periodicVertex> &dface = this->mDelaunayFaces[i];
+
+        Face face, tface;
+        uint8_t num_orig_verts = 0;
+
+        for(uint8_t d = 0; d < 3; d++) {
+
+            const periodicVertex &pvertex = dface[d];
+
+            const TypeIndex orig_vid = std::get<0>(pvertex);
+            const int offx = std::get<1>(pvertex);
+            const int offy = std::get<2>(pvertex);
+
+            face[d] = orig_vid;
+            tface[d] = orig_vid;
+
+            // is an original vertex
+            if (offx == 0 && offy == 0) {
+                num_orig_verts++;
+                continue;
+            }
+
+            // needs to be duplicated
+            auto iter = std::find(mDuplicateVertex_periodic.begin(), mDuplicateVertex_periodic.end(), pvertex);
+            size_t ndupid = 0;
+
+            if (iter != mDuplicateVertex_periodic.end()) {
+                ndupid = noverts + std::distance(mDuplicateVertex_periodic.begin(), iter);
+            }
+            else {
+                // otherwise, let's duplicate
+                Vertex dv (mVertices[orig_vid]);
+                dv[0] += (offx == 0) ? 0.0 : float(offx) *boxw[0];
+                dv[1] += (offy == 0) ? 0.0 : float(offy) *boxw[1];
+
+                ndupid = noverts + mDuplicateVerts.size();
+                mDuplicateVertex_periodic.push_back(pvertex);
+                mDuplicateVerts.push_back(dv);
+            }
+
+            tface[d] = ndupid;
+        }
+
+        if (num_orig_verts == 3) {
+            this->mFaces.push_back(face);
+        }
+        else {
+            this->mPeriodicFaces.push_back(face);
+            this->mTrimmedFaces.push_back(tface);
+        }
+    }
+
+    if (verbose) {
+        std::cout << " Done! created [" << mFaces.size() << ", " << mPeriodicFaces.size() << ", "<< mTrimmedFaces.size() << "] triangles "
+                  << " with [" << mVertices.size() << ", " << mDuplicateVerts.size() << "] vertices!\n";
+    }
+}
 
 //! -----------------------------------------------------------------------------
 //! read/write off format
@@ -509,12 +598,27 @@ bool TriMesh::write_off(const std::string &filename, const std::vector<Vertex> &
 //! output binary format
 //! -----------------------------------------------------------------------------
 
-bool TriMesh::write_binary(const std::string &fname) {
+//static
+bool TriMesh::write_binary(const std::string &fname,
+                           const std::vector<Vertex> &vertices, const std::vector<Face> &faces,
+                           const std::vector<std::string> &field_names,
+                           const std::vector<std::vector<TypeFunction>*> &fields,
+                           bool verbose) {
 
-    std::cout << "   > TriMesh::write_binary("<<fname<<")...";
-    fflush(stdout);
+    const uint32_t nfields = fields.size();
+    if (nfields != field_names.size()) {
+        std::ostringstream errMsg;
+        errMsg << " TriMesh::write_binary(): Got " << nfields << " fields, but " << field_names.size() << " field_names!\n";
+        throw std::invalid_argument(errMsg.str());
+    }
 
-    FILE * outfile = fopen(fname.c_str(), "wb");
+    // -------------------------------------------------------------------------
+    if (verbose) {
+        std::cout << "   > TriMesh::write_binary("<<fname<<")...";
+        fflush(stdout);
+    }
+
+    FILE* outfile = fopen(fname.c_str(), "wb");
 
     uint32_t index_size = sizeof(uint32_t);
     uint32_t function_size = sizeof(float);
@@ -525,11 +629,11 @@ bool TriMesh::write_binary(const std::string &fname) {
     fwrite(dummy_dimensions, sizeof(dummy_dimensions[0]), 3, outfile);
 
     // find the number of faces for each vertex
-    std::vector<uint8_t> counts(mVertices.size(),0);
-    std::vector<uint32_t> first(mVertices.size(), (uint32_t)-1);
+    std::vector<uint8_t> counts(vertices.size(),0);
+    std::vector<uint32_t> first(vertices.size(), (uint32_t)-1);
 
     uint32_t count = 0;
-    for (auto iter=mFaces.begin(); iter!=mFaces.end(); iter++) {
+    for (auto iter=faces.begin(); iter!=faces.end(); iter++) {
 
         const Face &f = *iter;
 
@@ -548,7 +652,7 @@ bool TriMesh::write_binary(const std::string &fname) {
     TypeIndex path[2];
 
     count = 0;
-    for (auto iter=mFaces.begin(); iter!=mFaces.end(); iter++) {
+    for (auto iter=faces.begin(); iter!=faces.end(); iter++) {
 
         const Face &face = *iter;
 
@@ -564,10 +668,10 @@ bool TriMesh::write_binary(const std::string &fname) {
 
                 fwrite(&token, sizeof(token), 1, outfile);
                 fwrite(&vert, sizeof(TypeIndex), 1, outfile);
-                fwrite(mVertices[vert].data(), sizeof(TypeFunction), 3, outfile);
+                fwrite(vertices[vert].data(), sizeof(TypeFunction), 3, outfile);
 
-                for (auto iter2=mFields.begin(); iter2!=mFields.end(); ++iter2) {
-                    const std::vector<TypeFunction> &data = iter2->second;
+                for (uint8_t f = 0; f < nfields; f++) {
+                    const std::vector<TypeFunction> &data = *(fields[f]);
                     fwrite(&(data[vert]), sizeof(TypeFunction), 1, outfile);
                 }
             }
@@ -604,18 +708,60 @@ bool TriMesh::write_binary(const std::string &fname) {
     }
     fflush(outfile);
     fclose(outfile);
-    std::cout << " Done! Wrote " << mVertices.size() << " vertices, "
-                                 << mFaces.size() << " faces, and "
-                                 << mFields.size() << " fields!\n";
-    if (mFields.size() > 0){
-        std::cout << "     > ";
-        for(auto piter = mFields.begin(); piter != mFields.end(); piter++)
-            std::cout << "["<<piter->first << "] ";
-        std::cout << std::endl;
-    }
+    if (verbose) {
+        std::cout << " Done! Wrote " << vertices.size() << " vertices, "
+                                     << faces.size() << " faces, and "
+                                     << fields.size() << " fields!\n";
 
+        if (fields.size() > 0){
+            std::cout << "     > ";
+            for(uint8_t i = 0; i < fields.size(); i++) {
+                const std::vector<TypeFunction> &data = *fields[i];
+                auto p = std::minmax_element(data.begin(), data.end());
+                std::cout << "["<<field_names[i] << " : " << *p.first << ", " << *p.second << "] ";
+            }
+            std::cout << std::endl;
+        }
+    }
     return true;
 }
 
+bool TriMesh::write_binary(const std::string &fname, const std::string &filter_fields) {
+
+    // -------------------------------------------------------------------------
+    // addition to write only the relevant fields!
+    std::vector<std::string> field_names;
+    std::vector<std::vector<TypeFunction>*> fields;
+
+    if (filter_fields.empty()) {
+        for (auto iter=mFields.begin(); iter!=mFields.end(); ++iter) {
+            field_names.push_back(iter->first);
+            fields.push_back(&(iter->second));
+        }
+    }
+    else {
+
+        // hardcoded! also write point areas
+        field_names.push_back("point_areas");
+        fields.push_back(&(mFields["point_areas"]));
+
+        for (auto iter=mFields.begin(); iter!=mFields.end(); ++iter) {
+            if (iter->first.find(filter_fields) != std::string::npos) {
+                field_names.push_back(iter->first);
+                fields.push_back(&(iter->second));
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    if (!this->mPeriodic) {
+        return TriMesh::write_binary(fname, this->mVertices, this->mFaces, field_names, fields, true);
+    }
+    else {
+        std::vector<Face> mfaces = this->mFaces;
+        mfaces.insert(mfaces.end(), this->mPeriodicFaces.begin(), this->mPeriodicFaces.end());
+        return TriMesh::write_binary(fname, this->mVertices, mfaces, field_names, fields, true);
+    }
+}
 //! -----------------------------------------------------------------------------
 //! -----------------------------------------------------------------------------

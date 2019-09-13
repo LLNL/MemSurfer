@@ -45,6 +45,9 @@ import_array();
 %apply (uint32_t* INPLACE_ARRAY2, int DIM1, int DIM2) {(uint32_t *_, int n, int d)};
 %apply (int32_t* INPLACE_ARRAY2, int DIM1, int DIM2) {(int32_t *_, int n, int d)};
 
+%apply (string key, float* INPLACE_ARRAY2, int DIM1, int DIM2) {(string key, float *_, int n, int d)};
+%apply (string key, double* INPLACE_ARRAY2, int DIM1, int DIM2) {(string key, double *_, int n, int d)};
+
 %include "Types.hpp"
 %include "PointSet.hpp"
 %include "TriMesh.hpp"

@@ -43,11 +43,12 @@ class TriMesh(object):
         self.nverts = self.vertices.shape[0]
 
         self.periodic = kwargs.get('periodic', False)
+        self.tmesh = pymemsurfer.TriMesh(self.vertices)
+
         if self.periodic:
-            self.tmesh = pymemsurfer.TriMeshPeriodic(self.vertices)
+            self.tmesh.set_periodic()
             self.label = kwargs.get('label', 'TriMeshPeriodic')
         else:
-            self.tmesh = pymemsurfer.TriMesh(self.vertices)
             self.label = kwargs.get('label', 'TriMesh')
 
         self.nfaces = 0
@@ -61,8 +62,8 @@ class TriMesh(object):
 
             self.tmesh.set_faces(self.faces)
 
-        LOGGER.info('Created <{}> with {} vertices and {} faces'
-                    .format(self.label, self.nverts, self.nfaces))
+        LOGGER.info('{} Created {} vertices and {} faces'
+                    .format(self.tag(), self.nverts, self.nfaces))
 
         # properties to be computed
         self.pnormals = np.empty((0,0))
@@ -88,26 +89,16 @@ class TriMesh(object):
 
         self.bbox = self.bbox.astype(np.float32)
         self.boxw = self.boxw.astype(np.float32)
-        LOGGER.info('<{}> setting bbox = {}'.format(self.label, self.bbox))
+        LOGGER.info('{} setting bbox = {}'.format(self.tag(), self.bbox))
         self.tmesh.set_bbox(self.bbox)
 
     # --------------------------------------------------------------------------
-    '''
-    def check_periodic(self, vertices, face):
 
-        for i in xrange(3):
-            p = vertices[face[i]]
-            q = vertices[face[(i+1)%3]]
-
-            if abs(p[0]-q[0]) > 100 or abs(p[1]-q[1]) > 100:
-                return False
-        return True
-    '''
     def copy_triangulation(self, mesh):
 
         assert(self.periodic == mesh.periodic)
 
-        self.tmesh.lift_delaunay(mesh.tmesh)
+        self.tmesh.copy_periodicDelaunay(mesh.tmesh)
         self.faces = self.tmesh.get_faces()
         self.faces = np.array(self.faces).reshape(-1,3).astype(np.uint32)
 
@@ -126,7 +117,7 @@ class TriMesh(object):
         if self.pverts.shape != (0,0):
             return self.pverts
 
-        LOGGER.info('Parameterizing the surface')
+        LOGGER.info('{} Parameterizing the surface'.format(self.tag()))
         mtimer = Timer()
 
         if xy:
@@ -138,7 +129,7 @@ class TriMesh(object):
         assert self.pverts.shape[0] == self.nverts
 
         mtimer.end()
-        LOGGER.info('Parameterization took {}'.format(mtimer))
+        LOGGER.info('{} Parameterization took {}'.format(self.tag(), mtimer))
         return self.pverts
 
     # --------------------------------------------------------------------------
@@ -150,7 +141,7 @@ class TriMesh(object):
         self.parameterize()
 
         npoints = points.shape[0]
-        LOGGER.info('Projecting {} points on the parameterized surface'.format(npoints))
+        LOGGER.info('{} Projecting {} points on the parameterized surface'.format(self.tag(), npoints))
 
         mtimer = Timer()
 
@@ -173,7 +164,7 @@ class TriMesh(object):
                 ppoints[i] += fbarys[i][j] * self.pverts[f[j]]
 
         mtimer.end()
-        LOGGER.info('Projecting took {}'.format(mtimer))
+        LOGGER.info('{} Projecting took {}'.format(self.tag(), mtimer))
         LOGGER.info('\tbbox of planar projections: {}, {}'.format(ppoints.min(axis=0), ppoints.max(axis=0)))
         LOGGER.info('\tbbox of surface projections: {}, {}'.format(spoints.min(axis=0), spoints.max(axis=0)))
         return (spoints, ppoints)
@@ -202,28 +193,34 @@ class TriMesh(object):
             return
 
         tag = ' periodic ' if self.periodic else ' '
-        LOGGER.info('Computing 2D{}Delaunay triangulation.'.format(tag))
+        LOGGER.info('{} Computing 2D{}Delaunay triangulation.'.format(self.tag(), tag))
         mtimer = Timer()
 
         faces = self.tmesh.delaunay(self.cverbose)
         self.faces = np.array(faces).reshape(-1, 3).astype(np.uint32)
         self.nfaces = self.faces.shape[0]
 
-        if self.periodic:
-
-            pfaces = self.tmesh.periodic_faces()
-            self.pfaces = np.array(pfaces).reshape(-1, 3).astype(np.uint32)
-
-            tfaces = self.tmesh.trimmed_faces()
-            self.tfaces = np.array(tfaces).reshape(-1, 3).astype(np.uint32)
-
-            dverts = self.tmesh.duplicated_vertices()
-            self.dverts = np.array(dverts).reshape(-1, self.vertices.shape[1]).astype(np.float32)
-
+        if not self.periodic:
             mtimer.end()
-            LOGGER.info('Periodic Delaunay triangulation took {}! created [{} {} {}] faces, and [{} {}] vertices.'
-                        .format(mtimer, self.nfaces, self.pfaces.shape[0], self.tfaces.shape[0],
-                                        self.nverts, self.dverts.shape))
+            LOGGER.info('{} Delaunay triangulation took {}! created {} faces, and {} vertices.'
+            .format(self.tag(), mtimer, self.nfaces, self.nverts))
+            return
+
+        # handle duplicated elements
+        pfaces = self.tmesh.periodic_faces()
+        self.pfaces = np.array(pfaces).reshape(-1, 3).astype(np.uint32)
+
+        tfaces = self.tmesh.trimmed_faces()
+        self.tfaces = np.array(tfaces).reshape(-1, 3).astype(np.uint32)
+
+        dverts = self.tmesh.duplicated_vertices()
+        self.dverts = np.array(dverts).reshape(-1, self.vertices.shape[1]).astype(np.float32)
+
+        mtimer.end()
+
+        LOGGER.info('{} Delaunay triangulation took {}! created [{} {} {}] faces, and [{} {}] vertices.'
+                    .format(self.tag(), mtimer, self.nfaces, self.pfaces.shape[0], self.tfaces.shape[0], self.nverts, self.dverts.shape[0]))
+
 
     # --------------------------------------------------------------------------
     def compute_normals(self):
@@ -231,7 +228,7 @@ class TriMesh(object):
         if self.pnormals.shape != (0,0):
             return self.pnormals
 
-        LOGGER.info('Computing normals')
+        LOGGER.info('{} Computing normals'.format(self.tag()))
         mtimer = Timer()
 
         rval = self.tmesh.need_normals(self.cverbose)
@@ -241,7 +238,7 @@ class TriMesh(object):
         self.pnormals = np.asarray(rval).reshape(-1,3).astype(np.float32)
 
         mtimer.end()
-        LOGGER.info('Computed {} normals! took {}'.format(self.nverts, mtimer))
+        LOGGER.info('{} Computed {} normals! took {}'.format(self.tag(), self.pnormals.shape[0], mtimer))
         return self.pnormals
 
     # --------------------------------------------------------------------------
@@ -250,7 +247,7 @@ class TriMesh(object):
         if self.pareas.shape != (0,):
             return self.pareas
 
-        LOGGER.info('Computing point areas')
+        LOGGER.info('{} Computing point areas'.format(self.tag()))
         mtimer = Timer()
 
         rval = self.tmesh.need_pointareas(self.cverbose)
@@ -260,7 +257,7 @@ class TriMesh(object):
         self.pareas = np.array(rval).astype(np.float32)
 
         mtimer.end()
-        LOGGER.info('Computed {} point areas! took {}'.format(self.nverts, mtimer))
+        LOGGER.info('{} Computed {} point areas! took {}'.format(self.tag(), self.pareas.shape[0], mtimer))
         return self.pareas
 
     # --------------------------------------------------------------------------
@@ -269,7 +266,7 @@ class TriMesh(object):
         if self.mean_curv.shape != (0,):
             return (self.mean_curv, self.gaus_curv)
 
-        LOGGER.info('Computing curvatures')
+        LOGGER.info('{} Computing curvatures'.format(self.tag()))
         mtimer = Timer()
 
         rval = self.tmesh.need_curvature(self.cverbose)
@@ -287,7 +284,7 @@ class TriMesh(object):
         self.gaus_curv = self.gaus_curv.astype(np.float32)
 
         mtimer.end()
-        LOGGER.info('Computed {} x2 curvatures! took {}'.format(self.nverts, mtimer))
+        LOGGER.info('{} Computed {} x2 curvatures! took {}'.format(self.tag(), self.nverts, mtimer))
         return (self.mean_curv, self.gaus_curv)
 
     # --------------------------------------------------------------------------
@@ -308,30 +305,25 @@ class TriMesh(object):
             cnt = len(pidxs)
             tag = '{} (of {})'.format(cnt, self.nverts)
 
-        LOGGER.info('Estimating density of {} points [name = {}]'.format(tag, name))
+        LOGGER.info('{} Estimating density of {} points [name = {}]'.format(self.tag(), tag, name))
         mtimer = Timer()
 
         k = pymemsurfer.DensityKernel(float(sigma))
-        d = self.tmesh.kde(type, k, name, pidxs.tolist(), self.cverbose)
+        d = self.tmesh.kde(type, k, name, pidxs.tolist(), normalize, self.cverbose)
         d = np.asarray(d, dtype=np.float32)
 
-		#print 'C++: ', d.min(), d.max(), d.mean(), np.median(d), d.sum()
-
-        # dividing d by d.sum() gives the pde of this lipid
-        # multiplying with the #lipids gives the distribution of chosen lipids
-        if normalize:
-            d *= float(cnt)/d.sum()
-
-        #print 'normalized: ', d.min(), d.max(), d.mean(), np.median(d), d.sum()
-
         mtimer.end()
-        LOGGER.info('Computed density! took {}'.format(mtimer))
+        LOGGER.info('{} Computed density! took {}'.format(self.tag(), mtimer))
+        LOGGER.info('\trange = [{}, {}], sum = {}'.format(d.min(), d.max(), d.sum()))
         return d
 
     # --------------------------------------------------------------------------
+    def tag(self):
+        return '[{}, periodic={}]'.format(self.label, self.periodic)
+
     def display(self):
-        LOGGER.info('<{}> : {} verts, {} faces. bbox = {}, {}'
-                    .format(self.label, self.nverts, self.nfaces,
+        LOGGER.info('{}: {} verts, {} faces. bbox = {}, {}'
+                    .format(self.tag(), self.nverts, self.nfaces,
                     self.vertices.min(axis=0), self.vertices.max(axis=0)))
 
     # --------------------------------------------------------------------------
@@ -339,8 +331,9 @@ class TriMesh(object):
     def copy_densities(self, mesh):
         self.tmesh.set_fields(mesh.tmesh, 'density')
 
-    def write_binary(self, filename):
-        self.tmesh.write_binary(filename)
+    def write_binary(self, filename, filter_fields):
+        LOGGER.info('{} Write binary with fields = [{}]'.format(self.tag(), filter_fields))
+        self.tmesh.write_binary(filename, filter_fields)
 
     def write_vtp(self, filename, properties={}):
 

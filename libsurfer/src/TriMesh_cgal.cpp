@@ -34,7 +34,7 @@ For details, see https://github.com/LLNL/MemSurfer.
 TriMesh::TriMesh(const Polyhedron &P) {
 
     this->mDim = 3;
-    this->mName = "TriMesh";
+    this->mPeriodic = false;
 
     mVertices.resize(P.size_of_vertices());
     mFaces.resize(P.size_of_facets());
@@ -72,7 +72,7 @@ TriMesh::TriMesh(const Polyhedron &P) {
 void TriMesh::sort_vertices(std::vector<Point_with_idx> &svertices) const {
 
 #ifndef CGAL_AVAILABLE
-    std::cerr << " ERROR: TriMesh::sort_vertices - CGAL not available! cannot sort vertices!\n";s
+    std::cerr << " ERROR: " << this->tag() <<"::sort_vertices - CGAL not available! cannot sort vertices!\n";s
 #else
     typedef CGAL::Spatial_sort_traits_adapter_3<Kernel, CGAL::First_of_pair_property_map<Point_with_idx>> Sort_traits;
 
@@ -98,23 +98,28 @@ void TriMesh::sort_vertices(std::vector<Point_with_idx> &svertices) const {
 #include <CGAL/Triangulation_vertex_base_with_info_2.h>
 #include <CGAL/Triangulation_data_structure_2.h>
 #include <CGAL/Delaunay_triangulation_2.h>
+#include <CGAL/Periodic_2_Delaunay_triangulation_2.h>
+#include <CGAL/Periodic_2_Delaunay_triangulation_traits_2.h>
 //#include <CGAL/Random.h>
 #endif
 
 std::vector<TypeIndexI> TriMesh::delaunay(bool verbose) {
 
+    if (this->mPeriodic) {
+        return this->periodicDelaunay(verbose);
+    }
+
 #ifndef CGAL_AVAILABLE
-    std::cerr << " ERROR: TriMesh::delaunay - CGAL not available! cannot compute Delaunay triangulation!\n";
+    std::cerr << " ERROR: " << this->tag() << "::delaunay - CGAL not available! cannot compute Delaunay triangulation!\n";
     return std::vector<TypeIndex>();
 #else
 
     if (this->mDim != 2) {
         std::ostringstream errMsg;
-        errMsg << " TriMesh::delaunay() requires a mesh in 2D!" << std::endl;
+        errMsg << " " << this->tag() << "::delaunay() requires a mesh in 2D!" << std::endl;
         throw std::invalid_argument(errMsg.str());
     }
 
-    //typedef CGAL::Projection_traits_xy_3<Kernel> dTraits;
     typedef Kernel dTraits;
     typedef CGAL::Triangulation_vertex_base_with_info_2<TypeIndex, dTraits> Vb_with_idx;
     typedef CGAL::Triangulation_face_base_2<dTraits> Fb;
@@ -122,7 +127,7 @@ std::vector<TypeIndexI> TriMesh::delaunay(bool verbose) {
     typedef CGAL::Delaunay_triangulation_2<dTraits, Tds> Delaunay;
 
     if (verbose) {
-        std::cout << "   > TriMesh::delaunay()...";
+        std::cout << "   > " << this->tag() << "::delaunay()...";
         fflush(stdout);
     }
 
@@ -152,20 +157,16 @@ std::vector<TypeIndexI> TriMesh::delaunay(bool verbose) {
 #endif
 }
 
-#include <CGAL/Periodic_2_Delaunay_triangulation_2.h>
-#include <CGAL/Periodic_2_Delaunay_triangulation_traits_2.h>
-
-std::vector<TypeIndexI> TriMeshPeriodic::delaunay(bool verbose) {
+std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
 
 #ifndef CGAL_AVAILABLE
-    std::cerr << " ERROR: TriMeshPeriodic::delaunay - CGAL not available! cannot compute Delaunay triangulation!\n";
+    std::cerr << " ERROR: " << this->tag() << "::periodicDelaunay - CGAL not available! cannot compute Delaunay triangulation!\n";
     return std::vector<TypeIndexI>();
 #else
 
-    //verbose = 1;
     if (this->mDim != 2) {
         std::ostringstream errMsg;
-        errMsg << " TriMeshPeriodic::delaunay() requires a mesh in 2D!" << std::endl;
+        errMsg << " " << this->tag() << "::periodicDelaunay() requires a mesh in 2D!" << std::endl;
         throw std::invalid_argument(errMsg.str());
     }
 
@@ -178,7 +179,7 @@ std::vector<TypeIndexI> TriMeshPeriodic::delaunay(bool verbose) {
     typedef CGAL::Periodic_2_Delaunay_triangulation_2<dTraits, Tds> Delaunay;
 
     if (verbose) {
-        std::cout << "   > TriMeshPeriodic::delaunay()...";
+        std::cout << "   > " << this->tag() << "::periodicDelaunay()...";
         fflush(stdout);
     }
 
@@ -228,87 +229,11 @@ std::vector<TypeIndexI> TriMeshPeriodic::delaunay(bool verbose) {
     if (verbose){
         std::cout << " Done! created " << mDelaunayFaces.size() << " triangles!\n";
     }
-    lift_delaunay(verbose);
+    trim_periodicDelaunay(verbose);
     return get_faces();
 #endif
 }
 
-void TriMeshPeriodic::lift_delaunay(bool verbose) {
-
-    this->mFaces.clear();
-    this->mPeriodicFaces.clear();
-    this->mTrimmedFaces.clear();
-    this->mDuplicateVerts.clear();
-    this->mDuplicateVertex_periodic.clear();
-
-    if (verbose) {
-        std::cout << "   > TriMeshPeriodic::lift_delaunay()...";
-        fflush(stdout);
-    }
-
-    const size_t noverts = this->mVertices.size();
-    const size_t ndfaces = this->mDelaunayFaces.size();
-    const Vertex boxw = mBox1 - mBox0;
-
-    for(size_t i = 0; i < ndfaces; i++) {
-
-        const std::vector<periodicVertex> &dface = this->mDelaunayFaces[i];
-
-        Face face, tface;
-        uint8_t num_orig_verts = 0;
-
-        for(uint8_t d = 0; d < 3; d++) {
-
-            const periodicVertex &pvertex = dface[d];
-
-            const TypeIndex orig_vid = std::get<0>(pvertex);
-            const int offx = std::get<1>(pvertex);
-            const int offy = std::get<2>(pvertex);
-
-            face[d] = orig_vid;
-            tface[d] = orig_vid;
-
-            // is an original vertex
-            if (offx == 0 && offy == 0) {
-                num_orig_verts++;
-                continue;
-            }
-
-            // needs to be duplicated
-            auto iter = std::find(mDuplicateVertex_periodic.begin(), mDuplicateVertex_periodic.end(), pvertex);
-            size_t ndupid = 0;
-
-            if (iter != mDuplicateVertex_periodic.end()) {
-                ndupid = noverts + std::distance(mDuplicateVertex_periodic.begin(), iter);
-            }
-            else {
-                // otherwise, let's duplicate
-                Vertex dv (mVertices[orig_vid]);
-                dv[0] += (offx == 0) ? 0.0 : float(offx) *boxw[0];
-                dv[1] += (offy == 0) ? 0.0 : float(offy) *boxw[1];
-
-                ndupid = noverts + mDuplicateVerts.size();
-                mDuplicateVertex_periodic.push_back(pvertex);
-                mDuplicateVerts.push_back(dv);
-            }
-
-            tface[d] = ndupid;
-        }
-
-        if (num_orig_verts == 3) {
-            this->mFaces.push_back(face);
-        }
-        else {
-            this->mPeriodicFaces.push_back(face);
-            this->mTrimmedFaces.push_back(tface);
-        }
-    }
-
-    if (verbose) {
-        std::cout << " Done! created [" << mFaces.size() << ", " << mPeriodicFaces.size() << ", "<< mTrimmedFaces.size() << "] triangles "
-                  << " with [" << mVertices.size() << ", " << mDuplicateVerts.size() << "] vertices!\n";
-    }
-}
 
 //! -----------------------------------------------------------------------------
 //! projection of points on the surface
@@ -324,18 +249,18 @@ void TriMeshPeriodic::lift_delaunay(bool verbose) {
 std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<Point3> &points, bool verbose) const {
 
 #ifndef CGAL_AVAILABLE
-    std::cerr << " ERROR: TriMesh::project_on_surface - CGAL not available! cannot project points on the surface!\n";
+    std::cerr << " ERROR: " << this->tag() << "::project_on_surface - CGAL not available! cannot project points on the surface!\n";
     return std::vector<TypeFunction>();
 #else
 
     if (this->mDim != 3) {
         std::ostringstream errMsg;
-        errMsg << " TriMesh::project_on_surface() requires a mesh in 3D!" << std::endl;
+        errMsg << " " << this->tag() << "::project_on_surface() requires a mesh in 3D!" << std::endl;
         throw std::invalid_argument(errMsg.str());
     }
 
     if (verbose) {
-        std::cout << "   > TriMesh::project_on_surface(<" << points.size() << ">)...";
+        std::cout << "   > " << this->tag() << "::project_on_surface(<" << points.size() << ">)...";
         fflush(stdout);
     }
 
@@ -394,13 +319,13 @@ std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<Point3> 
 std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<TypeFunction> &points, bool verbose) const {
 
 #ifndef CGAL_AVAILABLE
-    std::cerr << " ERROR: TriMesh::project_on_surface - CGAL not available! cannot project points on the surface!\n";
+    std::cerr << " ERROR: " << this->tag() << "::project_on_surface - CGAL not available! cannot project points on the surface!\n";
     return std::vector<TypeFunction>();
 #else
 
     if (points.size() % 3 != 0) {
         std::ostringstream errMsg;
-        errMsg << " TriMesh::project_on_surface() recieved invalid number of 3D points! got " << points.size() << " coordinates!" << std::endl;
+        errMsg << " " << this->tag() << "::project_on_surface() recieved invalid number of 3D points! got " << points.size() << " coordinates!" << std::endl;
         throw std::invalid_argument(errMsg.str());
     }
 
@@ -419,7 +344,7 @@ std::vector<TypeFunction> TriMesh::project_on_surface(const std::vector<TypeFunc
 std::vector<TypeFunction> TriMesh::distance_to_other_mesh(const TriMesh &other, bool verbose) const {
 
 #ifndef CGAL_AVAILABLE
-    std::cerr << " ERROR: TriMesh::project_on_surface - CGAL not available! cannot project points on the surface!\n";
+    std::cerr << " ERROR: " << this->tag() << "::project_on_surface - CGAL not available! cannot project points on the surface!\n";
     return std::vector<TypeFunction>();
 #else
 
@@ -460,7 +385,7 @@ std::vector<TypeFunction> TriMesh::distance_to_other_mesh(const TriMesh &other, 
 std::vector<TypeFunction> TriMesh::parameterize_xy(bool verbose) {
 
     if (verbose) {
-        std::cout << "   > TriMesh::parameterize_xy(<" << mVertices.size() << ">)...";
+        std::cout << "   > " << this->tag() << "::parameterize_xy(<" << mVertices.size() << ">)...";
         fflush(stdout);
     }
 
@@ -658,7 +583,7 @@ std::vector<TypeFunction> TriMesh::parameterize(bool verbose) {
     //typedef SMP::ARAP_parameterizer_3<SurfaceMesh, Border_parameterizer> Surface_parameterizer;
 
     if (verbose) {
-        std::cout << "   > TriMesh::parameterize(<" << mVertices.size() << ">)...";
+        std::cout << "   > " << this->tag() << "::parameterize(<" << mVertices.size() << ">)...";
         fflush(stdout);
     }
 

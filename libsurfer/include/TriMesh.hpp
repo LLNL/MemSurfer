@@ -32,25 +32,22 @@ class DistanceKernel;
 /// ---------------------------------------------------------------------------------------
 class TriMesh {
 
-protected:
-
-    //! Name of the mesh
-    std::string mName;
-
+private:
     //! Dimensionality of mesh (planar = 2D, surface = 3D)
     uint8_t mDim;
+
+    //! Whether this mesh is periodic (in xy) or not
+    bool mPeriodic;
+
+    //! -----------------------------------------------------------------------------------
+    //! Geometric elements
+    //! -----------------------------------------------------------------------------------
 
     //! The set of vertices
     std::vector<Vertex> mVertices;
 
     //! The set of faces
     std::vector<Face> mFaces;
-
-    //! Other properties
-    std::vector<Normal> mPointNormals, mFaceNormals;
-
-    //! A bunch of fields
-    std::unordered_map<std::string, std::vector<TypeFunction> > mFields;
 
     //! For each vertex, all neighboring vertices
     std::vector<std::vector<TypeIndex> > mVNeighbors;
@@ -66,8 +63,44 @@ protected:
     //! Collection of edges on the boundary
     std::vector<Edge> bedges;
 
-    //! geodesic distances
+    //! -----------------------------------------------------------------------------------
+    //! Geometric elements to handle periodicity
+    //! -----------------------------------------------------------------------------------
 
+    //! Bounding box
+    bool bbox_valid;
+    Vertex mBox0, mBox1;
+
+    //! On addition to the *actual* vertices and faces (i.e., inside the given domain),
+    //! we need to store extra information
+
+    //! A periodic vertex is stored as an offset (-1,0,1) with respect to the original vertex
+    using periodicVertex = typename std::tuple<TypeIndex, int, int>;
+
+    //! Delaunay Faces
+    std::vector<std::vector<periodicVertex> > mDelaunayFaces;
+
+    //! The faces that go across the domain (contain original points)
+    std::vector<Face> mPeriodicFaces;
+
+    //! The faces that contain duplicate points (to replace periodic triangles)
+    std::vector<Face> mTrimmedFaces;
+
+    //! The duplicate vertices that map to the original
+    std::vector<periodicVertex> mDuplicateVertex_periodic;
+
+    //! The vertices to support duplicate faces
+    std::vector<Vertex> mDuplicateVerts;
+
+    //! -----------------------------------------------------------------------------------
+
+    //! A bunch of fields defined on the mesh
+    std::unordered_map<std::string, std::vector<TypeFunction>> mFields;
+
+    //! Normals
+    std::vector<Normal> mPointNormals, mFaceNormals;
+
+    //! Geodesic distances
 //#define PDIST
 #ifndef PDIST
     std::vector<std::vector<TypeFunction>> mgeodesics;
@@ -75,19 +108,14 @@ protected:
     std::vector<TypeFunction> mgeodesics;
 #endif
 
-protected:
-    /// ---------------------------------------------------------------------------------------
-
-    //static void compute_geodesics_cgal(const std::vector<Vertex> &mvertices, const std::vector<Face> &mfaces,
-    //                                    std::vector<std::vector<TypeFunction>> &mdistances, bool verbose = false);
-
-    static void compute_geodesics_fw(const std::vector<Vertex> &mvertices, const std::vector<Face> &mfaces,
-                                     const DistanceKernel &dist, std::vector<std::vector<TypeFunction>> &mdistances, bool verbose = false);
+    //! -----------------------------------------------------------------------------------
+    //! Static methods to compute properties of interest
+    //! -----------------------------------------------------------------------------------
 
     static Point3 Point2Bary(const Point3 &p, const Point3 &a, const Point3 &b, const Point3 &c);
     static Point2 Bary2Point(const Point3 &bary, const Point2 &a, const Point2 &b, const Point2 &c);
 
-    /// ---------------------------------------------------------------------------------------
+    //! -----------------------------------------------------------------------------------
     //! linearize data into a single vector for interfacing with Python
     template <uint8_t D,  typename T, typename Tout>
     static std::vector<Tout> linearize(const std::vector<Vec<D,T> > &data, const uint8_t &vdim, size_t sz = 0) {
@@ -127,68 +155,78 @@ protected:
         return true;
     }
 
-    /// ---------------------------------------------------------------------------------------
+    //! -----------------------------------------------------------------------------------
+    //! compute normals for a set of vertices and faces
     static void need_normals(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
                              std::vector<Normal> &fnormals, std::vector<Normal> &pnormals);
 
+    //! compute point areas for a set of vertices
     static void need_pointareas(const std::vector<Face> &faces, const std::vector<Vertex> &vertices,
                                 std::vector<TypeFunction> &areas);
 
 
-    /// ---------------------------------------------------------------------------------------
+    //! compute graph geodesics
+    static void compute_geodesics_fw(const std::vector<Vertex> &mvertices, const std::vector<Face> &mfaces,
+                                     const DistanceKernel &dist, std::vector<std::vector<TypeFunction>> &mdistances,
+                                     bool verbose = false);
+
+    //static void compute_geodesics_cgal(const std::vector<Vertex> &mvertices, const std::vector<Face> &mfaces,
+    //                                    std::vector<Field> &mdistances, bool verbose = false);
+
+    //! -----------------------------------------------------------------------------------
+    //! nonstatic private methods
+    //! -----------------------------------------------------------------------------------
+
     //! set dimensionalty of the mesh vertices
     bool set_dimensionality(uint8_t _);
 
     //! sort vertices spatially (using cgal)
     void sort_vertices(std::vector<Point_with_idx> &svertices) const;
-#if 0
-    //! Compute connectivity
-    void need_neighbors(bool verbose = false);
-    void need_adjacentfaces(bool verbose = false);
-    void need_across_edge(bool verbose = false);
-    std::vector<TypeIndexI> need_boundary(bool verbose = false);
-#endif
+
+    //! wrap vertices in xy (dim = 2) or in xyz (dim = 3)
+    bool wrap_vertices(uint8_t dim = 2);
+
+    //! trim the periodic faces generated using periodic Delaunay
+    void trim_periodicDelaunay(bool verbose = false);
+
+    //! project a set of points on the surface (using cgal)
+    std::vector<TypeFunction> project_on_surface(const std::vector<Point3> &points, bool verbose = false) const;
+
 public:
+
+    //! -----------------------------------------------------------------------------------
+    //! API
+    //! -----------------------------------------------------------------------------------
 
     //! Constructors
     TriMesh() : mDim(0) {
-        this->mName = "TriMesh";
+        this->mPeriodic = false;
     }
-
     TriMesh(float *_, int n, int d) {
-        this->mName = "TriMesh";
-        set_dimensionality(d);
-        this->delinearize<3,TypeFunction,float>(_,n,d,mVertices);
+        this->mPeriodic = false;
+        this->set_dimensionality(d);
+        this->set_vertices(_,n,d);
     }
-    /*TriMesh(double *_, int n, int d) {
-        this->mName = "TriMesh";
-        set_dimensionality(d);
-        this->delinearize<3,double,TypeFunction>(_,n,d,mVertices);
-    }*/
-
     TriMesh(const Polyhedron &surface_mesh);
 
     //! Destructor
     ~TriMesh() {}
 
-    /// ---------------------------------------------------------------------------------------
-    //! set vertices and faces
+    std::string tag() const {
+        return this->mPeriodic ? "TriMeshPeriodic":"TriMesh";
+    }
+
+    //! -----------------------------------------------------------------------------------
+    //! Set and get vertices and faces
+    bool set_vertices(float *_, int n, int d) {
+        return this->delinearize<3,TypeFunction,float>(_,n,d,mVertices);
+    }
+    bool set_faces(uint32_t *_, int n, int d) {
+        return this->delinearize<3,TypeIndex,uint32_t>(_,n,d,mFaces);
+    }
     bool set_faces(const TriMesh &mesh) {
         mFaces = mesh.mFaces;
         return true;
-    }
-
-    bool set_fields(const TriMesh &mesh, std::string key) {
-        for (auto iter = mesh.mFields.begin(); iter != mesh.mFields.end(); iter++) {
-            if (iter->first.find(key) == 0) {
-                this->mFields[iter->first] = iter->second;
-            }
-        }
-        return true;
-    }
-
-    bool set_faces(uint32_t *_, int n, int d) {
-        return this->delinearize<3,TypeIndex,uint32_t>(_,n,d,mFaces);
     }
 
     //! The number of vertices and faces
@@ -199,172 +237,47 @@ public:
     std::vector<TypeFunction> get_vertices() const {    return linearize<3,TypeFunction,TypeFunction>(this->mVertices, this->mDim);    }
     std::vector<TypeIndexI> get_faces() const {         return linearize<3,TypeIndex,TypeIndexI>(this->mFaces, 3);          }
 
-    //! Return linearized function
+    //! -----------------------------------------------------------------------------------
+    //! Set a field with a name
+    bool set_field(std::string key, float *_, int n, int d) {
+
+        std::vector<TypeFunction> &v = mFields[key];
+        v.resize(n);
+        for(int i = 0; i < n; i++){
+          v[i] = _[i];
+        }
+        return true;
+    }
+    bool set_fields(const TriMesh &mesh, std::string key) {
+        for (auto iter = mesh.mFields.begin(); iter != mesh.mFields.end(); iter++) {
+            if (iter->first.find(key) == 0) {
+                this->mFields[iter->first] = iter->second;
+            }
+        }
+        return true;
+    }
+
+    //! Return linearized field
     std::vector<TypeFunction> get_field(const std::string &name) const {
         auto iter = mFields.find(name);
         return (iter != mFields.end()) ? iter->second : std::vector<TypeFunction> ();
     }
 
-    //! Compute vertex normals
-    const std::vector<TypeFunction> need_normals(bool verbose = false) {
-
-        // Compute only if point areas are not available
-        if (this->mPointNormals.size() != this->mVertices.size()) {
-
-            if (verbose) {
-                std::cout << "   > " << this->mName << "::need_normals()...";
-                fflush(stdout);
-            }
-
-            TriMesh::need_normals(this->mFaces, this->mVertices, this->mFaceNormals, this->mPointNormals);
-
-            if(verbose)
-                std::cout << " Done!\n";
-        }
-        return linearize<3,TypeFunction,TypeFunction>(this->mPointNormals, 3);
-    }
-
-    //! Compute per-vertex point areas
-    const std::vector<TypeFunction>& need_pointareas(bool verbose = false) {
-
-        // Compute only if point areas are not available
-        if (mFields.find("point_areas") == mFields.end()) {
-
-            if (verbose) {
-                std::cout << "   > " << this->mName << "::need_pointareas()...";
-                fflush(stdout);
-            }
-
-            TriMesh::need_pointareas(this->mFaces, this->mVertices, this->mFields["point_areas"]);
-
-            if(verbose)
-                std::cout << " Done!\n";
-        }
-        return mFields["point_areas"];
-    }
-
-    //! Compute density
-    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, bool verbose = false) {
-        return TriMesh::kde(type, k, name, std::vector<TypeIndexI>(), verbose);
-    }
-    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, const std::vector<TypeIndexI> &ids, bool verbose = false);
-
-    //! Compute curvature (using vtk)
-    std::vector<TypeFunction> need_curvature(bool verbose = false);             // TriMesh_vtk.cpp
-
-    //! parameterize the surface (using cgal)
-    std::vector<TypeFunction> parameterize(bool verbose = false);
-    std::vector<TypeFunction> parameterize_xy(bool verbose = false);
-
-    //! project a set of points on the triangulation (using cgal)
-    std::vector<TypeFunction> project_on_surface(const std::vector<TypeFunction> &points, bool verbose = false) const;
-
-private:
-    std::vector<TypeFunction> project_on_surface(const std::vector<Point3> &points, bool verbose = false) const;
-
-public:
-    //! compute the mesh as 2D Delaunay (using cgal)
-    std::vector<TypeIndexI> delaunay(bool verbose = false);
-
-    //! compute the distance of "this" mesh from the "other" mesh
-    std::vector<TypeFunction> distance_to_other_mesh(const TriMesh &other, bool verbose=false) const;
-
-#ifdef CGAL_GEODESIC
-    void geodesic() const;
-#endif
-#ifdef CPP_REMESHING
-    //! Remesh
-    void remesh(bool verbose = false);
-#endif
-
-    /// ---------------------------------------------------------------------------------------
-    //! read/write off format
-    static bool read_off(const std::string &fname, std::vector<Vertex> &get_vertices, std::vector<Face> &get_faces, bool verbose = false);
-    static bool write_off(const std::string &fname, const std::vector<Vertex> &get_vertices, const std::vector<Face> &get_faces, const uint8_t &dim, bool verbose = false);
-
-    bool read_off(const std::string &fname, bool verbose = false) {
-        this->mDim = 3;
-        return TriMesh::read_off(fname, mVertices, mFaces, verbose);
-    }
-    bool write_off(const std::string &fname, bool verbose = false) const {
-        return TriMesh::write_off(fname, mVertices, mFaces, mDim, verbose);
-    }
-
-    //! write in binary format
-    bool write_binary(const std::string &fname);
-
-    //! write in vtp (paraview) format with or without periodic face
-    bool write_vtp(const std::string &fname);
-};
-
-/// ---------------------------------------------------------------------------------------
-//!
-//! \brief This class provides functionality to operate upon a periodic Triangular Mesh
-//!         periodic in x,y
-//!
-/// ---------------------------------------------------------------------------------------
-class TriMeshPeriodic : public TriMesh {
-
-private:
-
-    //! Bounding box
-    Vertex mBox0, mBox1;
-    bool bbox_valid;
-
-    //! in addition to the *actual* vertices and faces (i.e., inside the given domain)
-    //! we need to store extra information
-
-    //! a periodic vertex is stored as an offset (-1,0,1) with respect to the original vertex
-    using periodicVertex = typename std::tuple<TypeIndex, int, int>;
-
-    //! delaunay vertices
-    std::vector<std::vector<periodicVertex> > mDelaunayFaces;
-
-    //! the faces that go across the domain (contain original points)
-    std::vector<Face> mPeriodicFaces;
-
-    //! the faces that contain duplicate points (to replace periodic triangles)
-    std::vector<Face> mTrimmedFaces;
-
-    //! the periodic vertices that map to the original
-    std::vector<periodicVertex> mDuplicateVertex_periodic;
-
-    //! the vertices to support duplicate faces
-    std::vector<Vertex> mDuplicateVerts;
-
-    //! wrap vertices in xy (dim = 2) or in xyz (dim = 3)
-    bool wrap_vertices(uint8_t dim = 2);
-
-    //! trim the periodic faces using the map
-    void lift_delaunay(bool verbose = false);
-
-
-public:
-
-    //! Constructor
-    TriMeshPeriodic(float *_, int n, int d) :
-        TriMesh(_,n,d) {
-        this->mName = "TriMeshPeriodic";
-    }
-    /*TriMeshPeriodic(double *_, int n, int d) :
-        TriMesh(_,n,d) {
-        this->mName = "TriMeshPeriodic";
-    }*/
-
-    //! Destructor
-    ~TriMeshPeriodic() {}
-
-    /// ---------------------------------------------------------------------------------------
+    //! -----------------------------------------------------------------------------------
     //! set periodic box
+    bool set_periodic() {
+        this->mPeriodic = true;
+        return true;
+    }
     bool set_bbox(float *_, int n);
 
-    //! set faces from a different triangulation
-    void lift_delaunay(const TriMeshPeriodic &mesh) {
+    //! set faces from a different triangulation and then trim
+    void copy_periodicDelaunay(const TriMesh &mesh) {
         this->mDelaunayFaces = mesh.mDelaunayFaces;
-        lift_delaunay();
+        trim_periodicDelaunay();
     }
 
-    /// ---------------------------------------------------------------------------------------
+    //! -----------------------------------------------------------------------------------
     //! access the periodicty data
 
     std::vector<TypeIndexI> periodic_faces(bool combined = false) const {
@@ -399,25 +312,67 @@ public:
         return dids;
     }
 
-    /// ---------------------------------------------------------------------------------------
+    //! -----------------------------------------------------------------------------------
+    //! Compute mesh properties
+    //! -----------------------------------------------------------------------------------
+
+    //! Compute vertex normals
+    const std::vector<TypeFunction> need_normals(bool verbose = false) {
+
+        // Compute only if point areas are not available
+        if (this->mPointNormals.size() != this->mVertices.size()) {
+
+            if (verbose) {
+                std::cout << "   > " << tag() << "::need_normals()...";
+                fflush(stdout);
+            }
+
+            if (!this->mPeriodic) {
+                TriMesh::need_normals(this->mFaces, this->mVertices, this->mFaceNormals, this->mPointNormals);
+            }
+            else {
+                std::vector<Face> faces = this->mFaces;
+                faces.insert(faces.end(), this->mTrimmedFaces.begin(), this->mTrimmedFaces.end());
+
+                std::vector<Vertex> vertices = this->mVertices;
+                vertices.insert(vertices.end(), this->mDuplicateVerts.begin(), this->mDuplicateVerts.end());
+
+                TriMesh::need_normals(faces, vertices, this->mFaceNormals, this->mPointNormals);
+
+                this->mFaceNormals.resize(this->mFaces.size());
+                this->mPointNormals.resize(this->mVertices.size());
+            }
+
+            if(verbose)
+                std::cout << " Done!\n";
+        }
+        return linearize<3,TypeFunction,TypeFunction>(this->mPointNormals, 3);
+    }
+
+    //! Compute per-vertex point areas
     const std::vector<TypeFunction>& need_pointareas(bool verbose = false) {
 
         // Compute only if point areas are not available
         if (mFields.find("point_areas") == mFields.end()) {
 
             if (verbose) {
-                std::cout << "   > " << this->mName << "::need_pointareas()...";
+                std::cout << "   > " << tag() << "::need_pointareas()...";
                 fflush(stdout);
             }
 
-            std::vector<Face> faces = this->mFaces;
-            faces.insert(faces.end(), this->mTrimmedFaces.begin(), this->mTrimmedFaces.end());
+            if (!this->mPeriodic) {
+                TriMesh::need_pointareas(this->mFaces, this->mVertices, this->mFields["point_areas"]);
+            }
+            else {
+                std::vector<Face> faces = this->mFaces;
+                faces.insert(faces.end(), this->mTrimmedFaces.begin(), this->mTrimmedFaces.end());
 
-            std::vector<Vertex> vertices = this->mVertices;
-            vertices.insert(vertices.end(), this->mDuplicateVerts.begin(), this->mDuplicateVerts.end());
+                std::vector<Vertex> vertices = this->mVertices;
+                vertices.insert(vertices.end(), this->mDuplicateVerts.begin(), this->mDuplicateVerts.end());
 
-            TriMesh::need_pointareas(faces, vertices, mFields["point_areas"]);
-            mFields["point_areas"].resize(this->mVertices.size());
+                TriMesh::need_pointareas(faces, vertices, mFields["point_areas"]);
+                mFields["point_areas"].resize(this->mVertices.size());
+            }
 
             if(verbose)
                 std::cout << " Done!\n";
@@ -425,44 +380,77 @@ public:
         return mFields["point_areas"];
     }
 
-    const std::vector<TypeFunction> need_normals(bool verbose = false) {
+    //! Compute curvature (using vtk)
+    std::vector<TypeFunction> need_curvature(bool verbose = false);             // TriMesh_vtk.cpp
 
-        // Compute only if point areas are not available
-        if (this->mPointNormals.size() != this->mVertices.size()) {
+    //! compute the mesh as 2D Delaunay (using cgal)
+    std::vector<TypeIndexI> delaunay(bool verbose = false);
+    std::vector<TypeIndexI> periodicDelaunay(bool verbose = false);
 
-            if (verbose) {
-                std::cout << "   > " << this->mName << "::need_normals()...";
-                fflush(stdout);
-            }
+    //! compute the distance of "this" mesh from the "other" mesh
+    std::vector<TypeFunction> distance_to_other_mesh(const TriMesh &other, bool verbose=false) const;
 
-            std::vector<Face> faces = this->mFaces;
-            faces.insert(faces.end(), this->mTrimmedFaces.begin(), this->mTrimmedFaces.end());
+    //! parameterize the surface (using cgal)
+    std::vector<TypeFunction> parameterize(bool verbose = false);
+    std::vector<TypeFunction> parameterize_xy(bool verbose = false);
 
-            std::vector<Vertex> vertices = this->mVertices;
-            vertices.insert(vertices.end(), this->mDuplicateVerts.begin(), this->mDuplicateVerts.end());
+    //! project a set of points on the triangulation (using cgal)
+    std::vector<TypeFunction> project_on_surface(const std::vector<TypeFunction> &points, bool verbose = false) const;
 
-            TriMesh::need_normals(faces, vertices, this->mFaceNormals, this->mPointNormals);
+    //! -----------------------------------------------------------------------------------
+    //! Compute density
+    //! -----------------------------------------------------------------------------------
+    const std::vector<TypeFunction>&
+        kde(const int &type, const DensityKernel& k, const std::string &name,
+            const bool &do_normalize, bool verbose = false) {
 
-            this->mFaceNormals.resize(this->mFaces.size());
-            this->mPointNormals.resize(this->mVertices.size());
-
-            if(verbose)
-                std::cout << " Done!\n";
-        }
-        return linearize<3,TypeFunction,TypeFunction>(this->mPointNormals,3);
+        return TriMesh::kde(type, k, name,
+                            std::vector<TypeIndexI>(), do_normalize, verbose);
     }
+    const std::vector<TypeFunction>&
+        kde(const int &type, const DensityKernel& k, const std::string &name,
+            const std::vector<TypeIndexI> &ids, const bool &do_normalize,
+            bool verbose = false);
+
+
+
+
+    //! -----------------------------------------------------------------------------------
+
+public:
+
+#ifdef CGAL_GEODESIC
+    void geodesic() const;
+#endif
+#ifdef CPP_REMESHING
+    //! Remesh
+    void remesh(bool verbose = false);
+#endif
 
     /// ---------------------------------------------------------------------------------------
-    std::vector<TypeIndexI> delaunay(bool verbose = false);
+    //! read/write off format
+    static bool read_off(const std::string &fname, std::vector<Vertex> &vertices, std::vector<Face> &faces, bool verbose = false);
+    static bool write_off(const std::string &fname, const std::vector<Vertex> &vertices, const std::vector<Face> &faces, const uint8_t &dim, bool verbose = false);
 
-    std::vector<TypeFunction> distance_to_other_mesh(const TriMeshPeriodic &other) const {
-        return TriMesh::distance_to_other_mesh(other);
+    bool read_off(const std::string &fname, bool verbose = false) {
+        this->mDim = 3;
+        return TriMesh::read_off(fname, mVertices, mFaces, verbose);
+    }
+    bool write_off(const std::string &fname, bool verbose = false) const {
+        return TriMesh::write_off(fname, mVertices, mFaces, mDim, verbose);
     }
 
-    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, bool verbose = false) {
-        return TriMeshPeriodic::kde(type, k, name, std::vector<TypeIndexI>(), verbose);
-    }
-    const std::vector<TypeFunction>& kde(const int &type, const DensityKernel& k, const std::string &name, const std::vector<TypeIndexI> &ids, bool verbose = false);
+    //! write in binary format
+    static bool write_binary(const std::string &fname,
+                             const std::vector<Vertex> &vertices, const std::vector<Face> &faces,
+                             const std::vector<std::string> &field_names,
+                             const std::vector<std::vector<TypeFunction>*> &fields,
+                             bool verbose = false);
+
+    bool write_binary(const std::string &fname, const std::string &filter_fields="");
+
+    //! write in vtp (paraview) format with or without periodic face
+    bool write_vtp(const std::string &fname);
 };
 
 /// ---------------------------------------------------------------------------------------

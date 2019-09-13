@@ -33,6 +33,8 @@ from memsurfer import utils
 # ------------------------------------------------------------------------------
 if __name__ == '__main__':
 
+    print 'using memsurfer from', memsurfer.__file__
+
     # --------------------------------------------------------------------------
     # Path to input data.
     # Currently, we're using hardcoded data, but it can be passed as argument
@@ -165,18 +167,25 @@ if __name__ == '__main__':
         mb = memsurfer.Membrane.compute(bt.positions, bt.resnames, bbox, periodic)
 
         # compute total density
-        sigmas = [10,20,30,40]
-        memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
-        
-        # compute density of each type of lipid
-        for l in lipids:
-            memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
+        sigmas = [10] #,20,30,40]
+        memsurfer.Membrane.compute_densities([mt, mb], [2], 
+            sigmas, 'all')
 
-        mt.write_all(outprefix+'_f{}-top'.format(ts.frame),
-                {'frame': ts.frame, 'time': syst.trajectory.time})
+        if False:   # local testing
+            pass
+            #mt.memb_smooth.write_binary(os.path.join(ddir, "tfile.bin"), 'density')
+            #mb.memb_smooth.write_binary(os.path.join(ddir, "bfile.bin"), 'density')
 
-        mb.write_all(outprefix+'_f{}-bot'.format(ts.frame),
-                {'frame': ts.frame, 'time': syst.trajectory.time})
+            #mt.memb_smooth.write_vtp(os.path.join(ddir, "tfile.vtp"), {})
+            #mb.memb_smooth.write_vtp(os.path.join(ddir, "bfile.vtp"), {})
 
-    # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
+        else:
+            # compute density of each type of lipid
+            mt.write_all(outprefix+'_f{}-top'.format(ts.frame),
+                    {'frame': ts.frame, 'time': syst.trajectory.time})
+
+            mb.write_all(outprefix+'_f{}-bot'.format(ts.frame),
+                    {'frame': ts.frame, 'time': syst.trajectory.time})
+
+        # --------------------------------------------------------------------------
+        # --------------------------------------------------------------------------

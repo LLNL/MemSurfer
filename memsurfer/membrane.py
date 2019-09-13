@@ -248,6 +248,7 @@ class Membrane(object):
         # estimate density of all points
         if nlabels == 0:
             self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, normalize, np.empty([0]))
+            #print '---------->',  self.properties[name].min(),self.properties[name].max()
             return
 
         # estimate density of a subset of points
@@ -257,6 +258,7 @@ class Membrane(object):
 
         lidxs = np.where(np.in1d(self.labels, labels))[0]
         self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, normalize, lidxs)
+        #print '---------->',  self.properties[name].min(),self.properties[name].max()
 
     # --------------------------------------------------------------------------
     @staticmethod
