@@ -64,7 +64,7 @@ A helper script `$MEM_HOME/install_deps.sh` is provided to install these depende
 In order to use this script, you need to specify a `C++` compiler that supports `OpenMP`.
 
 ```
-$ export CC=`which g++`
+$ export CC=`which gcc`
 $ export CXX=`which g++`
 $ sh install_deps.sh
 ```
@@ -76,10 +76,10 @@ edit the script (lines 5--8) to select which ones to install.
 Once installed successfully, please add the following to your shell profile to
 access these dependencies.
 ```
-$ export PYTHONPATH=$MEM_HOME/external/lib/python3.7/site-packages/:$PYTHONPATH
-$ export LD_LIBRARY_PATH=$MEM_HOME/external/lib/:$LD_LIBRARY_PATH
+$ export PYTHONPATH=$MEM_HOME/external/lib/python3.7/site-packages:$PYTHONPATH
+$ export LD_LIBRARY_PATH=$MEM_HOME/external/lib:$MEM_HOME/external/lib64:$LD_LIBRARY_PATH
       # linux
-$ export DYLD_LIBRARY_PATH=$MEM_HOME/external/lib/:$DYLD_LIBRARY_PATH
+$ export DYLD_LIBRARY_PATH=$MEM_HOME/external/lib:$MEM_HOME/external/lib64:$DYLD_LIBRARY_PATH
       # mac
 ```
 
