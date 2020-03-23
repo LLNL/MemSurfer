@@ -28,7 +28,17 @@ Installing MemSurfer and its dependencies additionally require the following sof
   - [CMake](https://cmake.org/): `v 3.13`
 
 
-### Installation
+### Installation via Spack
+
+MemSurfer is available via [spack](https://spack.io) -- a package manager for HPC. Please
+download spack (see instructions provded by `spack`). Once installed,
+please do the following
+```
+$ spack install memsurfer@develop +osmesa %gcc@7.3.0
+```
+The `+osmesa` variant enables OSMesa support for `VTK` . Here, the installation has been tested with `gcc@7.3.0`.
+
+### Installation from source
 
 MemSurfer can be downloaded using the following link.
 ```
@@ -111,6 +121,13 @@ $ CC=`which gcc` CXX=`which g++` LDCXXSHARED="`which g++` -bundle -undefined dyn
 ### Examples
 
 * See the `example` directory.
+
+### Change Log
+
+##### Mar 23, 2020
+
+* Correctly normalize Gaussian KDE and support 3D Gaussian kernel.
+
 
 ### License
 
