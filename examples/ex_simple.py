@@ -90,9 +90,10 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # estimate density of the points (all points, or selected on labels)
     sigmas = [0.2]
+    get_nlipdis = True
 
-    memsurfer.Membrane.compute_densities([m], [2], sigmas, 'all')
-    memsurfer.Membrane.compute_densities([m], [2], sigmas, '1')
+    memsurfer.Membrane.compute_densities([m], [2], sigmas, get_nlipdis, 'all')
+    memsurfer.Membrane.compute_densities([m], [2], sigmas, get_nlipdis, '1')
 
     # write the output
         # (required) a prefix for output files

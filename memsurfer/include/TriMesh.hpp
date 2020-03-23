@@ -401,19 +401,17 @@ public:
     //! Compute density
     //! -----------------------------------------------------------------------------------
     const std::vector<TypeFunction>&
-        kde(const int &type, const DensityKernel& k, const std::string &name,
-            const bool &do_normalize, bool verbose = false) {
+        kde(const std::string &name, const int type, const bool get_counts,
+            const DensityKernel& dens_kern, const DistanceKernel& dist_kern,
+            const bool verbose = false) {
 
-        return TriMesh::kde(type, k, name,
-                            std::vector<TypeIndexI>(), do_normalize, verbose);
+        return TriMesh::kde(name, type, get_counts, dens_kern, dist_kern,
+                            std::vector<TypeIndexI>(), verbose);
     }
     const std::vector<TypeFunction>&
-        kde(const int &type, const DensityKernel& k, const std::string &name,
-            const std::vector<TypeIndexI> &ids, const bool &do_normalize,
-            bool verbose = false);
-
-
-
+        kde(const std::string &name, const int type, const bool get_counts,
+            const DensityKernel& dens_kern, const DistanceKernel& dist_kern,
+            const std::vector<TypeIndexI> &ids, const bool verbose = false);
 
     //! -----------------------------------------------------------------------------------
 

@@ -234,7 +234,7 @@ class Membrane(object):
     # --------------------------------------------------------------------------
     # compute density of points given by plabels
         # on every vertex
-    def compute_density(self, type, sigma, name, normalize, labels=[]):
+    def compute_density(self, type, sigma, name, get_nlipdis, labels=[]):
 
         nlabels = len(labels)
 
@@ -247,7 +247,7 @@ class Membrane(object):
 
         # estimate density of all points
         if nlabels == 0:
-            self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, normalize, np.empty([0]))
+            self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, np.empty([0]))
             #print '---------->',  self.properties[name].min(),self.properties[name].max()
             return
 
@@ -257,8 +257,8 @@ class Membrane(object):
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         lidxs = np.where(np.in1d(self.labels, labels))[0]
-        self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, normalize, lidxs)
-        #print '---------->',  self.properties[name].min(),self.properties[name].max()
+        self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, lidxs)
+        #print ('----------> {} : {} {}'.format(name, self.properties[name].min(),self.properties[name].max()))
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -274,14 +274,14 @@ class Membrane(object):
 
     # --------------------------------------------------------------------------
     @staticmethod
-    def compute_densities(membranes, types, sigmas, l):
+    def compute_densities(membranes, types, sigmas, get_nlipdis, l):
 
         labels = [] if l == 'all' else [l]
         for t in types:
             for s in sigmas:
                 name = 'density_type{0}_{1}_k{2:.1f}'.format(t, l, s)
                 for m in membranes:
-                    m.compute_density(t, s, name, True, labels)
+                    m.compute_density(t, s, name, get_nlipdis, labels)
 
     # --------------------------------------------------------------------------
     # A static method that computes and returns a membrane object

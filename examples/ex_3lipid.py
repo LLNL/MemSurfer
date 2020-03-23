@@ -165,11 +165,12 @@ if __name__ == '__main__':
 
         # compute total density
         sigmas = [10,20,30,40]
-        memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
+        get_nlipdis = True
+        memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, get_nlipdis, 'all')
 
         # compute density of each type of lipid
         for l in lipids:
-            memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, 'all')
+            memsurfer.Membrane.compute_densities([mt, mb], [2], sigmas, get_nlipdis, 'all')
 
         if True:
             # compute density of each type of lipid

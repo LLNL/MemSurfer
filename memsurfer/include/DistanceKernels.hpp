@@ -12,22 +12,23 @@ For details, see https://github.com/LLNL/MemSurfer.
 /// ----------------------------------------------------------------------------
 /// ----------------------------------------------------------------------------
 
-#ifndef _DENSITYESTIMATION_H_
-#define _DENSITYESTIMATION_H_
+#ifndef _DISTANCE_KERNELS_H_
+#define _DISTANCE_KERNELS_H_
 
 #include <cmath>
 #include <vector>
 
 #include "Types.hpp"
 
-//! ---------------------------------------------------------------------------------------------
+//! ----------------------------------------------------------------------------
 //!
-//! \brief This class provides kernels to compute distance and density
+//! \brief This file provides kernels to compute distances
 //!
-//! ---------------------------------------------------------------------------------------------
+//! ----------------------------------------------------------------------------
 
-//! ---------------------------------------------------------------------------------------------
-//! the base class for distance kernel
+//! ----------------------------------------------------------------------------
+//! the (abstract) base class for distance kernel
+//! ----------------------------------------------------------------------------
 class DistanceKernel {
 public:
     DistanceKernel() {}
@@ -39,10 +40,38 @@ public:
         return (dim == 2) ? this->operator ()(a[0], a[1], b[0], b[1]) :
                (dim == 3) ? this->operator ()(a[0], a[1], a[2], b[0], b[1], b[2]) : -1;
     }
+
+    //! ------------------------------------------------------------------------
+protected:
+    static bool parse_bbox(float *_, int n, Vertex &bbox0, Vertex &bbox1) {
+
+      if (n == 2) {
+          bbox0 = Vertex(0, 0, 0);
+          bbox1 = Vertex(_[0], _[1], 0);
+      }
+      else if (n == 3) {
+          bbox0 = Vertex(0, 0, 0);
+          bbox1= Vertex(_[0], _[1], _[2]);
+      }
+      else if (n == 4) {
+          bbox0 = Vertex(_[0], _[1], 0);
+          bbox1 = Vertex(_[2], _[3], 0);
+      }
+      else if (n == 6) {
+          bbox0 = Vertex(_[0], _[1], _[2]);
+          bbox1 = Vertex(_[3], _[4], _[5]);
+      }
+      else {
+        return false;
+      }
+      return true;
+    }
+    //! ------------------------------------------------------------------------
 };
 
-//! ---------------------------------------------------------------------------------------------
+//! ----------------------------------------------------------------------------
 //! Square euclidean distance
+//! ----------------------------------------------------------------------------
 class DistanceSquared : public DistanceKernel {
 
 public:
@@ -55,8 +84,9 @@ public:
     }
 };
 
-//! ---------------------------------------------------------------------------------------------
+//! ----------------------------------------------------------------------------
 //! Square euclidean distance on periodic domain in xy
+//! ----------------------------------------------------------------------------
 class DistancePeriodicXYSquared : public DistanceKernel {
 
     Vertex mBox0, mBox1, mBoxw;
@@ -71,6 +101,22 @@ public:
                   << " [" << mBox1[0] << ", " << mBox1[1] << "], width = "
                   << " [" << mBoxw[0] << ", " << mBoxw[1] << "]\n";
     }
+
+    DistancePeriodicXYSquared(float *_, int n) {
+      if (!DistanceKernel::parse_bbox(_, n, mBox0, mBox1)) {
+          std::ostringstream errMsg;
+          errMsg << " DistancePeriodicXYSquared(): Invalid bounding box!" << std::endl;
+          throw std::invalid_argument(errMsg.str());
+      }
+      this->mBoxw = mBox1 - mBox0;
+      return;
+
+      std::cout << " Initializing DistancePeriodicXYSquared. Domain = "
+                << " [" << mBox0[0] << ", " << mBox0[1] << ", " << mBox0[2] << "] -- "
+                << " [" << mBox1[0] << ", " << mBox1[1] << ", " << mBox1[2] << "], width = "
+                << " [" << mBoxw[0] << ", " << mBoxw[1] << ", " << mBoxw[2] << "]\n";
+    }
+
     TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction bx, TypeFunction by) const {
 
         if (fabs(ax - bx) >= 0.5*mBoxw[0]) {
@@ -100,6 +146,14 @@ public:
         mBox0 = bbox0;  mBox1 = bbox1;
         mBoxw = mBox1 - mBox0;
     }
+    DistancePeriodicSquared(float *_, int n) {
+      if (!DistanceKernel::parse_bbox(_, n, mBox0, mBox1)) {
+          std::ostringstream errMsg;
+          errMsg << " DistancePeriodicSquared(): Invalid bounding box!" << std::endl;
+          throw std::invalid_argument(errMsg.str());
+      }
+      this->mBoxw = mBox1 - mBox0;
+    }
     TypeFunction operator()(TypeFunction ax, TypeFunction ay, TypeFunction bx, TypeFunction by) const {
 
         if (fabs(ax - bx) >= 0.5*mBoxw[0]) {
@@ -124,29 +178,6 @@ public:
         return this->operator ()(ax, ay, bx, by) + (az - bz)*(az - bz);
     }
 };
-
-//! ---------------------------------------------------------------------------------------------
-//! The baseclass for all density estimators
-class DensityKernel {
-
-    const bool mNormalize;
-    const TypeFunction mOneOverm2SigmaSquare;       // = -1 / (2*sigma*sigma)
-    const TypeFunction mOneOver2pSigmaSquare;       // =  1 / (2*pi*sigma*sigma)
-
-public:
-    DensityKernel(const TypeFunction &sigma, bool normalize = true) :
-        mNormalize(normalize),
-        mOneOverm2SigmaSquare(-1.0/(2.0*sigma*sigma)),
-        mOneOver2pSigmaSquare(1.0/(2.0*22.0/7.0*sigma*sigma)) {}
-
-
-    const TypeFunction &normalization_factor() const {  return mOneOver2pSigmaSquare;   }
-    TypeFunction operator()(const TypeFunction &xsquared) const {
-        return mNormalize ? exp(xsquared*mOneOverm2SigmaSquare) * mOneOver2pSigmaSquare :
-                            exp(xsquared*mOneOverm2SigmaSquare);
-    }
-};
-
 //! ---------------------------------------------------------------------------------------------
 
-#endif /* DENSITYESTIMATION_H_ */
+#endif /* _DISTANCE_KERNELS_H_ */

@@ -18,7 +18,8 @@ For details, see https://github.com/LLNL/MemSurfer.
 #include <chrono>
 
 #include "TriMesh.hpp"
-#include "DensityEstimation.hpp"
+#include "DensityKernels.hpp"
+#include "DistanceKernels.hpp"
 
 #ifdef PDIST
 size_t square_to_condensed(const size_t &i, const size_t &j, const size_t &n) {
@@ -334,80 +335,64 @@ void TriMesh::compute_geodesics_fw(const std::vector<Vertex> &mvertices, const s
 //! density estimation (core function)
 /// -----------------------------------------------------------------------------
 
-void normalize(std::vector<TypeFunction> &_, const size_t n) {
+/*void normalize(std::vector<TypeFunction> &_, const size_t n) {
     const TypeFunction sm = std::accumulate(_.begin(), _.end(), TypeFunction(0));
     std::transform(_.begin(), _.end(), _.begin(),
                std::bind(std::multiplies<TypeFunction>(), std::placeholders::_1, TypeFunction(n)/sm));
-}
+}*/
 
-void kde_2d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &ids,
-            const DensityKernel& k, const DistanceKernel &dist, bool do_normalize,
-            std::vector<TypeFunction> &density) {
-
-    const size_t nids = ids.size();
-    const size_t nverts = vertices.size();
-    density.resize(nverts, 0);
-
-    static TypeFunction tmp;
-
-    if (ids.empty()) {  // compute for all ids
-        for (TypeIndex j=0;   j<nverts; j++) {
-        for (TypeIndex i=j+1; i<nverts; i++) {
-
-            tmp = k(dist(vertices[i][0], vertices[i][1], vertices[j][0], vertices[j][1]));
-            density[j] += tmp;
-            density[i] += tmp;
-        }}
-    }
-    else {              // compute for selected ids
-        for (TypeIndex j=0; j<nverts; j++) {
-        for (TypeIndex i=0; i<nids;   i++) {
-
-            tmp = k(dist(vertices[ids[i]][0], vertices[ids[i]][1], vertices[j][0], vertices[j][1]));
-            density[j] += tmp;
-        }}
-    }
-
-    if (do_normalize)
-      normalize(density, nids==0 ? nverts : nids);
-}
-
-void kde_3d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &ids,
-            const DensityKernel& k, const DistanceKernel &dist, bool do_normalize,
-            std::vector<TypeFunction> &density) {
+void
+kde_2d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &ids,
+       const DensityKernel& k, const DistanceKernel &dist,
+       std::vector<TypeFunction> &density) {
 
     const size_t nids = ids.size();
     const size_t nverts = vertices.size();
     density.resize(nverts, 0);
 
-    static TypeFunction tmp;
-
-    if (ids.empty()) {  // compute for all ids
-        for (TypeIndex j=0;   j<nverts; j++) {
-        for (TypeIndex i=j+1; i<nverts; i++) {
-
-            tmp = k(dist(vertices[i][0], vertices[i][1], vertices[i][2],
-                         vertices[j][0], vertices[j][1], vertices[j][2]));
-            density[j] += tmp;
-            density[i] += tmp;
+    if (nids == 0) {  // compute for all ids
+        for (TypeIndex j=0; j<nverts; j++) {
+        for (TypeIndex i=0; i<nverts; i++) {
+            density[j] += k(dist(vertices[i][0], vertices[i][1],
+                                 vertices[j][0], vertices[j][1]));
         }}
     }
     else {              // compute for selected ids
         for (TypeIndex j=0; j<nverts; j++) {
         for (TypeIndex i=0; i<nids;   i++) {
-
-            tmp = k(dist(vertices[ids[i]][0], vertices[ids[i]][1], vertices[ids[i]][2],
-                         vertices[j][0],      vertices[j][1],      vertices[j][2]));
-            density[j] += tmp;
+            density[j] += k(dist(vertices[ids[i]][0], vertices[ids[i]][1],
+                                 vertices[j][0],      vertices[j][1]));
         }}
     }
+}
 
-    if (do_normalize)
-      normalize(density, nids==0 ? nverts : nids);
+void
+kde_3d(const std::vector<Vertex> &vertices, const std::vector<TypeIndexI> &ids,
+       const DensityKernel& k, const DistanceKernel &dist,
+       std::vector<TypeFunction> &density) {
+
+    const size_t nids = ids.size();
+    const size_t nverts = vertices.size();
+    density.resize(nverts, 0);
+
+    if (nids == 0) {  // compute for all ids
+        for (TypeIndex j=0; j<nverts; j++) {
+        for (TypeIndex i=0; i<nverts; i++) {
+            density[j] += k(dist(vertices[i][0], vertices[i][1], vertices[i][2],
+                                 vertices[j][0], vertices[j][1], vertices[j][2]));
+        }}
+    }
+    else {              // compute for selected ids
+        for (TypeIndex j=0; j<nverts; j++) {
+        for (TypeIndex i=0; i<nids;   i++) {
+            density[j] += k(dist(vertices[ids[i]][0], vertices[ids[i]][1], vertices[ids[i]][2],
+                                 vertices[j][0],      vertices[j][1],      vertices[j][2]));
+        }}
+    }
 }
 
 void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
-            const DensityKernel& k, bool do_normalize,
+            const DensityKernel& k,
 #ifdef PDIST
             const std::vector<TypeFunction> &distances,
 #else
@@ -422,8 +407,8 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
     static TypeFunction tmp;
 
     if (ids.empty()) {  // compute for all ids
-        for (TypeIndex j=0;   j<nverts; j++) {
-        for (TypeIndex i=j+1; i<nverts; i++) {
+        for (TypeIndex j=0; j<nverts; j++) {
+        for (TypeIndex i=0; i<nverts; i++) {
 
 #ifdef PDIST
             tmp = distances[square_to_condensed(i,j,nverts)];
@@ -434,7 +419,6 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
             // but density kernel requires squared distance
             tmp = k(tmp*tmp);
             density[j] += tmp;
-            density[i] += tmp;
         }}
     }
     else {              // compute for selected ids
@@ -450,9 +434,6 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
             density[j] += tmp;
         }}
     }
-
-    if (do_normalize)
-      normalize(density, nids==0 ? nverts : nids);
 }
 
 /// -----------------------------------------------------------------------------
@@ -460,13 +441,14 @@ void kde_2m(const size_t &nverts, const std::vector<TypeIndexI> &ids,
 /// -----------------------------------------------------------------------------
 
 const std::vector<TypeFunction>&
-    TriMesh::kde(const int &type, const DensityKernel& k, const std::string &name,
-                 const std::vector<TypeIndexI> &ids,
-                 const bool& do_normalize, bool verbose) {
+    TriMesh::kde(const std::string &name, const int type, const bool get_counts,
+                 const DensityKernel& dens, const DistanceKernel& dist,
+                 const std::vector<TypeIndexI> &ids, const bool verbose) {
 
     if (type < 1 || type > 3) {
-        std::cout << "   > " << this->tag() << "::kde(" << type << ">): invalid distance type!\n";
-        exit(1);
+        std::ostringstream errMsg;
+        errMsg << "   > " << this->tag() << "::kde(" << type << ">): invalid density type (should be 1, 2, or 3)!\n";
+        throw std::invalid_argument(errMsg.str());
     }
 
     // this name already exists in the map!
@@ -482,39 +464,67 @@ const std::vector<TypeFunction>&
         fflush(stdout);
     }
 
-    if (!this->mPeriodic) {
-        DistanceSquared dist;
-        if (type == 1) {
-            if (mgeodesics.empty()) {
-                compute_geodesics_fw(this->mVertices, this->mFaces, dist, this->mgeodesics, verbose);
-            }
-            kde_2m(this->mVertices.size(), ids, k, do_normalize, this->mgeodesics, mFields[name]);
-        }
-        else if (type == 2) {
-            kde_2d(mVertices, ids, k, dist, do_normalize, mFields[name]);
-        }
-        else {
-            kde_3d(mVertices, ids, k, dist, do_normalize, mFields[name]);
-        }
-    }
+    // we will be using this!
+    std::vector<TypeFunction> &density = mFields[name];
+
+    // now, compute the appropriate density!
+    if (type == 2) {      kde_2d(mVertices, ids, dens, dist, density); }
+    else if (type == 3){  kde_3d(mVertices, ids, dens, dist, density); }
+
+    // geodesic density!
     else {
-        DistancePeriodicXYSquared dist(mBox0, mBox1);
-        if (type == 1) {
-            if (mgeodesics.empty()) {
-                std::vector<Face> mfaces = this->mFaces;
-                mfaces.insert(mfaces.end(), this->mPeriodicFaces.begin(), this->mPeriodicFaces.end());
-                compute_geodesics_fw(this->mVertices, mfaces, dist, this->mgeodesics, verbose);
-            }
-            kde_2m(this->mVertices.size(), ids, k, do_normalize, this->mgeodesics, mFields[name]);
+        // initialize the geodesic graph!
+        if (mgeodesics.empty()) {
+          if (this->mPeriodic) {
+            std::vector<Face> mfaces = this->mFaces;
+            mfaces.insert(mfaces.end(), this->mPeriodicFaces.begin(), this->mPeriodicFaces.end());
+            compute_geodesics_fw(this->mVertices, mfaces, dist, this->mgeodesics, verbose);
+          }
+          else {
+            compute_geodesics_fw(this->mVertices, this->mFaces, dist, this->mgeodesics, verbose);
+          }
         }
-        else if (type == 2) {
-            kde_2d(mVertices, ids, k, dist, do_normalize, mFields[name]);
-        }
-        else {
-            kde_3d(mVertices, ids, k, dist, do_normalize, mFields[name]);
-        }
+
+        kde_2m(this->mVertices.size(), ids, dens, this->mgeodesics, mFields[name]);
     }
 
+    // -------------------------------------------------------------------------
+    // now, normalize the density
+    // -------------------------------------------------------------------------
+    // need two types of normalizations!
+    //    1. we need to divide by nverts
+    //        because we added nverts gaussians (one for each vertex)
+    //        this is needed by kde (to turn this into a pdf)
+    //        if this function was to be sampled dense enough, it would sum to 1
+    //    2. if get_counts = True
+    //        we want to turn this pdf into number of particles
+    //        so we want to make sure the sum is equal to number of ids
+    // -------------------------------------------------------------------------
+
+    const size_t ng = this->mVertices.size();           // num of gaussians
+
+    // first normalization
+    if (1) {
+
+      const TypeFunction norm = 1.0 / TypeFunction(ng);
+      std::transform(density.begin(), density.end(), density.begin(),
+                     std::bind(std::multiplies<TypeFunction>(), std::placeholders::_1, norm));
+    }
+
+    // second normalization
+    if (get_counts) {
+
+      const size_t np = (ids.empty()) ? ng : ids.size();  // num of points counted
+      const TypeFunction dsm = std::accumulate(density.begin(), density.end(), TypeFunction(0));
+      const TypeFunction norm = (TypeFunction(np) / dsm);
+
+      // now, do the normalization
+      std::transform(density.begin(), density.end(), density.begin(),
+                     std::bind(std::multiplies<TypeFunction>(), std::placeholders::_1, norm));
+    }
+
+    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
     if(verbose){
         printf(" Done!\n");
     }

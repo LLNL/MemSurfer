@@ -19,7 +19,8 @@ For details, see https://github.com/LLNL/MemSurfer.
 #include "Types.hpp"
 #include "PointSet.hpp"
 #include "TriMesh.hpp"
-#include "DensityEstimation.hpp"
+#include "DensityKernels.hpp"
+#include "DistanceKernels.hpp"
 %}
 
 %include "stdint.i"
@@ -51,4 +52,5 @@ import_array();
 %include "Types.hpp"
 %include "PointSet.hpp"
 %include "TriMesh.hpp"
-%include "DensityEstimation.hpp"
+%include "DensityKernels.hpp"
+%include "DistanceKernels.hpp"

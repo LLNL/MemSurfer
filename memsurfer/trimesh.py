@@ -293,7 +293,7 @@ class TriMesh(object):
         return np.asarray(d, dtype=np.float32)
 
     # --------------------------------------------------------------------------
-    def compute_density(self, type, sigma, name, normalize, pidxs):
+    def compute_density(self, type, sigma, name, get_nlipids, pidxs):
 
         if type < 1 or type > 3:
             raise InvalidArgument('Invalid density type, {}. Should be 1 (geodesic), 2 (2D) or 3 (3D)'.format(type))
@@ -308,13 +308,32 @@ class TriMesh(object):
         LOGGER.info('{} Estimating density of {} points [name = {}]'.format(self.tag(), tag, name))
         mtimer = Timer()
 
-        k = pymemsurfer.DensityKernel(float(sigma))
-        d = self.tmesh.kde(type, k, name, pidxs.tolist(), normalize, self.cverbose)
+        # ----------------------------------------------------------------------
+        # based on the type of density, choose the correct kernel!
+        if type == 1 or type == 2:
+            dens_kern = pymemsurfer.GaussianKernel2D(float(sigma))
+        elif type == 3:
+            dens_kern = pymemsurfer.GaussianKernel3D(float(sigma))
+        else:
+            assert False
+
+        # ----------------------------------------------------------------------
+        # based on periodicity, choose the correct distance kernel!
+        if self.periodic:
+            dist_kern = pymemsurfer.DistancePeriodicXYSquared(self.bbox)
+        else:
+            dist_kern = pymemsurfer.DistanceSquared()
+
+        # ----------------------------------------------------------------------
+        d = self.tmesh.kde(name, type, get_nlipids, dens_kern, dist_kern,
+                            pidxs.tolist(), self.cverbose)
         d = np.asarray(d, dtype=np.float32)
 
         mtimer.end()
         LOGGER.info('{} Computed density! took {}'.format(self.tag(), mtimer))
         LOGGER.info('\trange = [{}, {}], sum = {}'.format(d.min(), d.max(), d.sum()))
+
+        # ----------------------------------------------------------------------
         return d
 
     # --------------------------------------------------------------------------
@@ -347,11 +366,12 @@ class TriMesh(object):
                 properties['pnormals'] = self.pnormals
             if self.pareas.shape != (0,):
                 properties['pareas'] = self.pareas
+            '''
             if self.mean_curv.shape != (0,):
                 properties['mean_curv'] = self.mean_curv
             if self.gaus_curv.shape != (0,):
                 properties['gaus_curv'] = self.gaus_curv
-
+            '''
         else:
             def append(a,b):
                 return np.concatenate((a,b), axis=0)
@@ -369,14 +389,16 @@ class TriMesh(object):
                 properties['pnormals'] = append_dups(self.pnormals, dids)
             if self.pareas.shape != (0,):
                 properties['pareas'] = append_dups(self.pareas, dids)
+            '''
             if self.mean_curv.shape != (0,):
                 properties['mean_curv'] = append_dups(self.mean_curv, dids)
             if self.gaus_curv.shape != (0,):
                 properties['gaus_curv'] = append_dups(self.gaus_curv, dids)
-
+            '''
         from .utils import write2vtkpolydata
         if self.periodic:
             properties['bbox'] = self.boxw
+
         write2vtkpolydata(filename, verts, properties)
 
     # --------------------------------------------------------------------------
