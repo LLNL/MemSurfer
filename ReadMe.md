@@ -1,5 +1,5 @@
 ## MemSurfer, Version 1.0
-#### Released: Apr 17, 2019
+#### Released: Mar 23, 2020
 
 ##### Author: Harsh Bhatia (hbhatia@llnl.gov) and Peer-Timo Bremer
 
@@ -34,9 +34,16 @@ MemSurfer is available via [spack](https://spack.io) -- a package manager for HP
 download spack (see instructions provded by `spack`). Once installed,
 please do the following
 ```
-$ spack install memsurfer@develop +osmesa %gcc@7.3.0
+$ spack install memsurfer +osmesa %gcc@7.3.0
 ```
 The `+osmesa` variant enables OSMesa support for `VTK` . Here, the installation has been tested with `gcc@7.3.0`.
+
+
+*Note:* Since `spack` is a large-scale open-source project, new changes in the dependencies may break MemSurfer's
+installation if the variants and/or other configurations are changed by the corresponding authors.
+
+MemSurfer's installation has been last verified with `spack` on Jun 09, 2020 with `commit 2421d90`. If you are new
+to `spack`, it is recommended to work at the mentioned commit.
 
 ### Installation from source
 
@@ -108,7 +115,7 @@ $ export CGAL_ROOT=<path_to_cgal>
 $ export EIGEN_ROOT=<path_to_eigen>
       # such that eigen headers are contained in $EIGEN_ROOT/include/eigen3
 ```
-Note that, all these paths default to `$MEM_HOME/external`. So you if you installed
+Note that, all these paths default to `$MEM_HOME/external`. So if you installed
 the dependencies using the script provided above, you do not need to specify these
 paths.
 
@@ -127,6 +134,7 @@ $ CC=`which gcc` CXX=`which g++` LDCXXSHARED="`which g++` -bundle -undefined dyn
 ##### Mar 23, 2020
 
 * Correctly normalize Gaussian KDE and support 3D Gaussian kernel.
+* Ported to Python3.
 
 
 ### License

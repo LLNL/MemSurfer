@@ -23,6 +23,11 @@ from distutils.command.build import build
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
+__version_info__ = ('1', '0', '0')
+__version__ = '.'.join(__version_info__)
+
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 def is_newer_than_python37():
     return sys.version_info[0] == 3 and sys.version_info[1] >= 7
 
@@ -187,7 +192,7 @@ if __name__ == '__main__' :
     # --------------------------------------------------------------------------
     # set up!
     setup(name='memsurfer',
-          version='1.0.0',
+          version=__version__,
           author='Harsh Bhatia',
           author_email='hbhatia@llnl.gov',
           url='https://github.com/LLNL/MemSurfer',
