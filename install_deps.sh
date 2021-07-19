@@ -100,7 +100,7 @@ if [ "$INSTALL_EIGEN" = true ] ; then
     VERSION='3.3.7'
     NAME='Eigen-'$VERSION
     FILE=$VERSION.tar.bz2
-    URL=http://bitbucket.org/eigen/eigen/get/$FILE
+    URL=https://gitlab.com/libeigen/eigen/-/archive/$VERSION/$FILE
     TEST=$PATH_Ext/include/eigen3
 
     _test $TEST

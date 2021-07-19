@@ -1,5 +1,6 @@
 *.DS_Store
 build*
+external/
 *user
 
 memsurfer.egg-info/
