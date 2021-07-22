@@ -192,9 +192,19 @@ if __name__ == '__main__':
     # install pypoisson as an Extension module
     # included the setup functionality of https://github.com/mmolero/pypoisson
     # --------------------------------------------------------------------------
-    PATH_PP = os.path.join(PATH_MEM, 'pypoisson/src/PoissonRecon_v6_13/src/')
-    SRC_PP = [os.path.join(PATH_PP, x) for x in os.listdir(PATH_PP) if x.endswith('.cpp')]
-    SRC_PP = ['pypoisson/src/pypoisson.pyx'] + SRC_PP
+    PATH_PP  = os.path.join(PATH_MEM, 'pypoisson')
+    PATH_PPR = os.path.join(PATH_PP,  'PoissonRecon_v6_13/src')
+
+    # get all cpp files
+    SRC_PP = [x for x in os.listdir(PATH_PPR) if x.endswith('.cpp')]
+
+    # need to remove these files that expose main function
+    exe_files = ['PoissonRecon.cpp', 'SurfaceTrimmer.cpp']
+    SRC_PP = [x for x in SRC_PP if x not in exe_files]
+    SRC_PP = [os.path.join(PATH_PPR, x) for x in SRC_PP]
+
+    # add the pyx
+    SRC_PP = [os.path.join(PATH_PP, 'pypoisson.pyx')] + SRC_PP
 
     # here, we assume that the compiler supports c++11
     # ideally, we would like to identify the compiler during configuration
