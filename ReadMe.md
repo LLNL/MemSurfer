@@ -155,6 +155,6 @@ This error means that your ssh keys are not registered with github. Please see [
 
 ### License
 
-MemSurfer is released under GPU-3.0 license. See the `LICENSE` file for details.
+MemSurfer is released under GNU GPL-3.0 license. See the `LICENSE` file for details.
 
 *`LLNL-CODE-763493`*
