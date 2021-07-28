@@ -43,6 +43,9 @@ fi
 command -v "${CC_COMPILER}" >/dev/null 2>&1 || { echo >&2 "Cannot find C compiler '${CC_COMPILER}'. Aborting."; exit 1;  }
 command -v "${CXX_COMPILER}" >/dev/null 2>&1 || { echo >&2 "Cannot find CXX compiler '${CXX_COMPILER}'. Aborting."; exit 1;  }
 
+echo "    > Using gcc = (${CC_COMPILER})"
+echo "    > Using g++ = (${CXX_COMPILER})"
+
 # ------------------------------------------------------------------------------
 # common utilities
 # ------------------------------------------------------------------------------
@@ -94,7 +97,10 @@ if [ "$INSTALL_EIGEN" = true ] ; then
       pushd $BUILD_PATH > /dev/null
       echo "    ($NAME) Configuring (`pwd`)"
 
-      cmake -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
+      cmake -DCMAKE_C_COMPILER=${CC_COMPILER} \
+            -DCMAKE_CXX_COMPILER=${CXX_COMPILER} \
+            -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
             .. > $PATH_Ext/$NAME.cmake.log 2>&1
 
       # eigen needs only make install
@@ -134,12 +140,13 @@ if [ "$INSTALL_BOOST" = true ] ; then
       pushd $BUILD_PATH > /dev/null
       echo "    ($NAME) Configuring (`pwd`)"
 
+      CC=${CC_COMPILER} CXX=${CXX_COMPILER} \
       ./bootstrap.sh --prefix=$PATH_Ext \
                      --with-python=`which python3` \
                      --with-libraries=atomic,thread,graph,chrono,date_time \
                      > $PATH_Ext/$NAME.bootstrap.log 2>&1
 
-      echo "    ($NAME) Building and installing ($NAME)"
+      echo "    ($NAME) Building and installing"
       ./b2 install > $PATH_Ext/$NAME.make.log 2>&1
 
       # test the installation
@@ -178,7 +185,9 @@ if [ "$INSTALL_CGAL" = true ] ; then
       pushd $BUILD_PATH > /dev/null
       echo "    ($NAME) Configuring (`pwd`)"
 
-      cmake -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
+      cmake -DCMAKE_C_COMPILER=${CC_COMPILER} \
+            -DCMAKE_CXX_COMPILER=${CXX_COMPILER} \
+            -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
             -DCMAKE_BUILD_TYPE:STRING=Release \
             -DCMAKE_CXX_FLAGS:STRING="-Wno-dev -Wno-unknown-warning-option" \
             -DBUILD_SHARED_LIBS:BOOL=ON \
@@ -225,10 +234,13 @@ if [ "$INSTALL_VTK" = true ] ; then
       pushd $BUILD_PATH > /dev/null
       echo "   ($NAME) Configuring (`pwd`)"
 
-      cmake -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
+      cmake -DCMAKE_C_COMPILER=${CC_COMPILER} \
+            -DCMAKE_CXX_COMPILER=${CXX_COMPILER} \
+            -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
             -DCMAKE_BUILD_TYPE:STRING=Release \
-            -DBUILD_SHARED_LIBS:BOOL=ON \
+            -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
             -DCMAKE_CXX_FLAGS:STRING="-Wno-inconsistent-missing-override -Wno-deprecated-declarations -Wno-dev -Wno-unknown-warning-option" \
+            -DBUILD_SHARED_LIBS:BOOL=ON \
             -DPYTHON_EXECUTABLE=`which python3` \
             -DVTK_PYTHON_VERSION=3 \
             -DVTK_WRAP_PYTHON:BOOL=ON \
