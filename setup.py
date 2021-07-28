@@ -11,24 +11,24 @@ For details, see https://github.com/LLNL/MemSurfer.
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-import getpass
+import os
+import sys
 import glob
 import numpy
-import os
 import socket
+import getpass
 import subprocess
-import sys
 
-from pkg_resources import parse_version
 from distutils import sysconfig
+from pkg_resources import parse_version
 from setuptools import find_packages, setup, Extension
 from setuptools.command.build_ext import build_ext
-from setuptools.command.install import install
-
+from setuptools.command.build_py import build_py
+from Cython.Build import cythonize
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-__version_info__ = ('1', '0', '0')
+__version_info__ = ('1', '0', '1')
 __version__ = '.'.join(__version_info__)
 
 
@@ -44,29 +44,6 @@ def check_platform():
     raise Exception(f'Unknown platform ({sys.platform})!')
 
 
-def check_dependencies(packages):
-
-    for k, v in packages.items():
-
-        output = subprocess.run(v['cmd'],
-                                capture_output=True,
-                                universal_newlines=True,
-                                shell=True,
-                                check=True)
-
-        if len(output.stderr) != 0:
-            raise Exception(output.stderr)
-
-        rval = [r for r in output.stdout.splitlines() if len(r) > 0]
-        vstring = rval[0].split()[-1]
-
-        if parse_version(vstring) < parse_version(v['min_version']):
-            raise Exception(f"Insufficient version of ({k}): "
-                            f"{vstring} < {v['min_version']}!")
-
-
-# ------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------
 def shlib_extn():
     if sys.platform.startswith('linux'):
         return 'so'
@@ -86,6 +63,28 @@ def find_shlib_path(path, libname):
     raise Exception(f'Find_shlib_path({path},{libname}) failed!')
 
 
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+def check_dependencies(packages):
+
+    for k, v in packages.items():
+        output = subprocess.run(v['cmd'],
+                                capture_output=True,
+                                universal_newlines=True,
+                                shell=True,
+                                check=True)
+
+        if len(output.stderr) != 0:
+            raise Exception(output.stderr)
+
+        rval = [r for r in output.stdout.splitlines() if len(r) > 0]
+        vstring = rval[0].split()[-1]
+
+        if parse_version(vstring) < parse_version(v['min_version']):
+            raise Exception(f"Insufficient version of ({k}): "
+                            f"{vstring} < {v['min_version']}!")
+
+
 def fetch_paths(default):
     # look for the paths of these packages
     packages = ['vtk', 'cgal', 'eigen', 'boost']
@@ -94,11 +93,12 @@ def fetch_paths(default):
     paths = {}
     for i in range(len(packages)):
         k = packages[i]
-        try:
-            p = os.path.expandvars(os.environ[f'{k.upper()}_ROOT'])
-        except KeyError:
-            p = default
-        print(f'  > {k.upper()} = ({p})')
+        kr = f'{k.upper()}_ROOT'
+
+        p = os.path.expandvars(os.environ.get(kr, default))
+        assert os.path.isdir(p), f'Did not find ({kr}={p})'
+
+        print(f'  > {kr} = ({p})')
         paths[k] = {'root': p, 'include': os.path.join(p, 'include')}
 
     # now, update the include paths
@@ -134,37 +134,12 @@ class CustomBuildExt(build_ext):
         return filename.replace(suffix, "") + ext
 
 
-class CustomInstall(install):
-
+class CustomBuildPy(build_py):
+    # https://stackoverflow.com/questions/12491328/python-distutils-not-include-the-swig-generated-module
+    # https://stackoverflow.com/questions/29477298/setup-py-run-build-ext-before-anything-else/48942866#48942866
     def run(self):
-        self.run_command('build_ext')
-        self.do_egg_install()
-
-        # ----------------------------------------------------------------------
-        # currently, the _pymemsurfer.so file is getting installed
-        # in the egg directory but not in the memsurfer package
-        # until I figure out how to fix that, just create a symlink
-        if True:
-            libname = '_pymemsurfer.so'
-
-            dist_name = self.config_vars['dist_name']
-            dist_fullname = self.config_vars['dist_fullname']
-            py_version = self.config_vars['py_version_short']
-            platform = os.path.basename(self.build_lib)
-            platform = platform.replace('lib.', '').replace(f'-{py_version}', '')
-
-            egg_name = f'{dist_fullname}-py{py_version}-{platform}.egg'
-            egg_path = os.path.join(self.install_libbase, egg_name)
-
-            pwd = os.getcwd()
-            os.chdir(os.path.join(egg_path, dist_name))
-
-            src = os.path.join('..', libname)
-            trg = os.path.join('.', libname)
-            print(f'Symlinking ({src}) to ({trg}) within ({os.getcwd()})')
-            os.symlink(src, trg)
-            os.chdir(pwd)
-        # ----------------------------------------------------------------------
+        self.run_command("build_ext")
+        return super().run()
 
 
 # ------------------------------------------------------------------------------
@@ -177,8 +152,8 @@ if __name__ == '__main__':
 
     # figure out the path to the source directory of memsurfer
     PATH_MEM = os.path.dirname(os.path.abspath(__file__))
-    print(f'> Installing MemSurfer for ({getpass.getuser}) '
-          f'on ({socket.gethostname}) (platform={sys.platform})')
+    print(f'> Installing MemSurfer for ({getpass.getuser()}) '
+          f'on ({socket.gethostname()}) (platform={sys.platform})')
     pltform = check_platform()
 
     # --------------------------------------------------------------------------
@@ -188,11 +163,21 @@ if __name__ == '__main__':
     print(f'  > MemSurfer = ({PATH_MEM})')
     PATHS = fetch_paths(os.path.join(PATH_MEM, 'external'))
 
+    # external libs
+    extn = shlib_extn()
+    LIBS_VTK = glob.glob(os.path.join(PATHS['vtk']['lib'], f'libvtk*.{extn}'))
+    LIBS_CGAL = glob.glob(os.path.join(PATHS['cgal']['lib'], f'libCGAL*.{extn}'))
+    LIBS_EXT = LIBS_VTK + LIBS_CGAL
+
+    LIBS_EXT = [os.path.basename(l) for l in LIBS_EXT]
+    LIBS_EXT = [os.path.splitext(l)[0] for l in LIBS_EXT]
+    LIBS_EXT = [l[3:] for l in LIBS_EXT]
+
     # --------------------------------------------------------------------------
     # install pypoisson as an Extension module
     # included the setup functionality of https://github.com/mmolero/pypoisson
     # --------------------------------------------------------------------------
-    PATH_PP  = os.path.join(PATH_MEM, 'pypoisson')
+    PATH_PP = os.path.join(PATH_MEM, 'pypoisson')
     PATH_PPR = os.path.join(PATH_PP,  'PoissonRecon_v6_13/src')
 
     # get all cpp files
@@ -209,9 +194,9 @@ if __name__ == '__main__':
     # here, we assume that the compiler supports c++11
     # ideally, we would like to identify the compiler during configuration
     if pltform in ['linux', 'darwin']:
-        macros = [('__linux__', '1')]
+        macros = [('__linux__', 1)]
     else:
-        macros = [('__linux__', '0')]
+        macros = [('__linux__', 0)]
 
     EXT_PP = Extension('pypoisson', language='c++',
                        define_macros=macros,
@@ -225,26 +210,21 @@ if __name__ == '__main__':
     # Now, build an extension module for MemSurfer's cpp code
     # --------------------------------------------------------------------------
     # cpp code
-    INC_MEM = os.path.join(PATH_MEM, 'memsurfer', 'include')
-    SRC_MEM = glob.glob(os.path.join(PATH_MEM, 'memsurfer', 'src', '*.cpp'))
-    SRC_MEM.append(os.path.join(PATH_MEM, 'memsurfer', 'pymemsurfer.i'))
-
-    # external libs
-    LIBS_VTK = glob.glob(os.path.join(PATHS['vtk']['lib'], 'libvtk*'))
-    LIBS_CGAL = glob.glob(os.path.join(PATHS['cgal']['lib'], 'libCGAL*'))
-    LIBS_EXT = LIBS_VTK + LIBS_CGAL
-
-    LIBS_EXT = list(set([os.path.realpath(l) for l in LIBS_EXT]))
-    LIBS_EXT = [os.path.basename(l) for l in LIBS_EXT]
-    LIBS_EXT = [os.path.splitext(l)[0] for l in LIBS_EXT]
-    LIBS_EXT = [l[3:] for l in LIBS_EXT]
+    PATH_PM = os.path.join(PATH_MEM, 'memsurfer')
+    SRC_MEM = ['memsurfer.i', 'src/PointSet.cpp', 'src/TriMesh.cpp',
+               'src/TriMesh_cgal.cpp', 'src/TriMesh_kde.cpp', 'src/TriMesh_vtk.cpp']
+    SRC_MEM = [os.path.join(PATH_PM, f) for f in SRC_MEM]
+    PATH_PM = os.path.join(PATH_PM, 'src')
 
     # define the extension module
-    EXT_MEM = Extension('_pymemsurfer', language='c++',
-                        swig_opts=['-c++', '-I' + INC_MEM],
+    # this name should be _[name defined in memsurfer.i]
+    # prepending with "memsurfer" puts this in the memsurfer namespace
+    EXT_MEM = Extension('memsurfer._memsurfer_cmod', language='c++',
+                        swig_opts=['-c++', '-I' + PATH_PM],
                         define_macros=[('VTK_AVAILABLE', 1), ('CGAL_AVAILABLE', 1)],
                         extra_compile_args=['-std=c++11',
                                             '-Wno-parentheses',
+                                            '-Wno-uninitialized',
                                             '-Wno-inconsistent-missing-override',
                                             '-Wno-deprecated-declarations',
                                             '-Wno-unknown-pragmas',
@@ -252,7 +232,7 @@ if __name__ == '__main__':
                                             '-Wno-unknown-warning-option'],
                         extra_link_args=['-std=c++11'],
                         sources=SRC_MEM,
-                        include_dirs=[INC_MEM, numpy.get_include(),
+                        include_dirs=[PATH_PM, numpy.get_include(),
                                       PATHS['boost']['include'],
                                       PATHS['eigen']['include'],
                                       PATHS['cgal']['include'],
@@ -275,9 +255,8 @@ if __name__ == '__main__':
           license='GPL 3',
 
           packages=find_packages(),
-          package_data={'memsurfer': ['_pymemsurfer.so', 'pypoisson.so']},
-          ext_modules=[EXT_PP,EXT_MEM],
-          cmdclass={'build_ext': CustomBuildExt, 'install': CustomInstall}
+          ext_modules=cythonize([EXT_PP, EXT_MEM]),
+          cmdclass={'build_py': CustomBuildPy, 'build_ext': CustomBuildExt}
           )
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------

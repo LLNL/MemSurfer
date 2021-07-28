@@ -16,7 +16,7 @@ import numpy as np
 import logging
 LOGGER = logging.getLogger(__name__)
 
-from . import pymemsurfer
+from . import memsurfer_cmod
 from .utils import Timer
 
 # ------------------------------------------------------------------------------
@@ -43,7 +43,7 @@ class TriMesh(object):
         self.nverts = self.vertices.shape[0]
 
         self.periodic = kwargs.get('periodic', False)
-        self.tmesh = pymemsurfer.TriMesh(self.vertices)
+        self.tmesh = memsurfer_cmod.TriMesh(self.vertices)
 
         if self.periodic:
             self.tmesh.set_periodic()
@@ -311,18 +311,18 @@ class TriMesh(object):
         # ----------------------------------------------------------------------
         # based on the type of density, choose the correct kernel!
         if type == 1 or type == 2:
-            dens_kern = pymemsurfer.GaussianKernel2D(float(sigma))
+            dens_kern = memsurfer_cmod.GaussianKernel2D(float(sigma))
         elif type == 3:
-            dens_kern = pymemsurfer.GaussianKernel3D(float(sigma))
+            dens_kern = memsurfer_cmod.GaussianKernel3D(float(sigma))
         else:
             assert False
 
         # ----------------------------------------------------------------------
         # based on periodicity, choose the correct distance kernel!
         if self.periodic:
-            dist_kern = pymemsurfer.DistancePeriodicXYSquared(self.bbox)
+            dist_kern = memsurfer_cmod.DistancePeriodicXYSquared(self.bbox)
         else:
-            dist_kern = pymemsurfer.DistanceSquared()
+            dist_kern = memsurfer_cmod.DistanceSquared()
 
         # ----------------------------------------------------------------------
         d = self.tmesh.kde(name, type, get_nlipids, dens_kern, dist_kern,

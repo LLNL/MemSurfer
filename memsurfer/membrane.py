@@ -17,10 +17,10 @@ import logging
 LOGGER = logging.getLogger(__name__)
 
 from pypoisson import poisson_reconstruction
-
-from . import pymemsurfer
+from . import memsurfer_cmod
 from .trimesh import TriMesh
 from .utils import Timer
+
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
@@ -78,7 +78,7 @@ class Membrane(object):
         # create point set object
         self.points = self.points.astype(np.float32)
         self.bbox = self.bbox.astype(np.float32)
-        self.pset = pymemsurfer.PointSet(self.points)
+        self.pset = memsurfer_cmod.PointSet(self.points)
         self.pnormals = np.empty((0,0))
 
         # other properties
