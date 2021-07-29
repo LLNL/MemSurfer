@@ -24,6 +24,16 @@ echo ''
 echo "> Installing MemSurfer's dependencies for (`whoami`) on (`hostname`). platform = (`uname`)"
 echo "    > Installation path = ("$PATH_Ext")"
 
+unameout=`uname`
+if [ "$unameout" == "Linux" ]; then
+    shlib_extn=".so"
+elif [ "$unameout" == "Darwin" ]; then
+    shlib_extn=".dylib"
+else
+    echo "Script works only for Linux and Darwin"
+    exit
+fi
+
 # ------------------------------------------------------------------------------
 # check commands
 # ------------------------------------------------------------------------------
@@ -45,6 +55,8 @@ command -v "${CXX_COMPILER}" >/dev/null 2>&1 || { echo >&2 "Cannot find CXX comp
 
 echo "    > Using gcc = (${CC_COMPILER})"
 echo "    > Using g++ = (${CXX_COMPILER})"
+export CC=${CC_COMPILER}
+export CXX=${CXX_COMPILER}
 
 # ------------------------------------------------------------------------------
 # common utilities
@@ -90,9 +102,11 @@ if [ "$INSTALL_EIGEN" = true ] ; then
       echo "    ($NAME) Already installed. Found ($TEST_DIR)."
     else
       rm $PATH_Ext/$NAME.*.log 2>/dev/null
-      _fetch $NAME $URL $PATH_Ext/$NAME.download.log
 
-      BUILD_PATH=$dirname/build-$(date "+%Y%m%d-%H%M%S")
+      ts=$(date "+%Y%m%d-%H%M%S")
+      _fetch $NAME $URL $PATH_Ext/$NAME.download-$ts.log
+
+      BUILD_PATH=$dirname/build-$ts
       mkdir -p $BUILD_PATH
       pushd $BUILD_PATH > /dev/null
       echo "    ($NAME) Configuring (`pwd`)"
@@ -101,11 +115,11 @@ if [ "$INSTALL_EIGEN" = true ] ; then
             -DCMAKE_CXX_COMPILER=${CXX_COMPILER} \
             -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
             -DCMAKE_BUILD_TYPE:STRING=Release \
-            .. > $PATH_Ext/$NAME.cmake.log 2>&1
+            .. > $PATH_Ext/$NAME.cmake-$ts.log 2>&1
 
       # eigen needs only make install
       echo "    ($NAME) Building and installing"
-      make install -j$NPROCS >$PATH_Ext/$NAME.make.log 2>&1
+      make install -j$NPROCS >$PATH_Ext/$NAME.make-$ts.log 2>&1
 
       # test the installation
       if [ -d $TEST_DIR ]; then
@@ -133,27 +147,29 @@ if [ "$INSTALL_BOOST" = true ] ; then
       echo "    ($NAME) Already installed. Found ($TEST_FILE)."
     else
       rm $PATH_Ext/$NAME.*.log 2>/dev/null
-      _fetch $NAME $URL $PATH_Ext/$NAME.download.log
+
+      ts=$(date "+%Y%m%d-%H%M%S")
+      _fetch $NAME $URL $PATH_Ext/$NAME.download-$ts.log
 
       BUILD_PATH=$dirname
       mkdir -p $BUILD_PATH
       pushd $BUILD_PATH > /dev/null
       echo "    ($NAME) Configuring (`pwd`)"
 
-      CC=${CC_COMPILER} CXX=${CXX_COMPILER} \
       ./bootstrap.sh --prefix=$PATH_Ext \
+                     --with-toolset=gcc \
                      --with-python=`which python3` \
                      --with-libraries=atomic,thread,graph,chrono,date_time \
-                     > $PATH_Ext/$NAME.bootstrap.log 2>&1
+                     > $PATH_Ext/$NAME.bootstrap-$ts.log 2>&1
 
       echo "    ($NAME) Building and installing"
-      ./b2 install > $PATH_Ext/$NAME.make.log 2>&1
+      ./b2 install > $PATH_Ext/$NAME.make-$ts.log 2>&1
 
       # test the installation
       if [ -f $TEST_FILE ]; then
-          echo "    ($NAME) Successfully installed at ($PATH_Ext)."
+        echo "    ($NAME) Successfully installed at ($PATH_Ext)."
       else
-          echo "    ($NAME) installation failed. Please see build logs in ($PATH_Ext) for more information."
+        echo "    ($NAME) Installation failed. Please see build logs in ($PATH_Ext) for more information."
       fi
       popd > /dev/null
     fi
@@ -169,8 +185,8 @@ if [ "$INSTALL_CGAL" = true ] ; then
     NAME='CGAL-4.13'
     FILE='CGAL-4.13.tar.gz'
     URL="https://github.com/CGAL/cgal/archive/releases/$FILE"
-    TEST_FILE1="$PATH_Ext/lib/libCGAL.dylib"
-    TEST_FILE2="$PATH_Ext/lib64/libCGAL.dylib"
+    TEST_FILE1="$PATH_Ext/lib/libCGAL$shlib_extn"
+    TEST_FILE2="$PATH_Ext/lib64/libCGAL$shlib_extn"
 
     if [ -f $TEST_FILE1 ]; then
       echo "    ($NAME) Already installed. Found ($TEST_FILE1)."
@@ -178,9 +194,11 @@ if [ "$INSTALL_CGAL" = true ] ; then
       echo "    ($NAME) Already installed. Found ($TEST_FILE2)."
     else
       rm $PATH_Ext/$NAME.*.log 2>/dev/null
-      _fetch $NAME $URL $PATH_Ext/$NAME.download.log
 
-      BUILD_PATH=$dirname/build-$(date "+%Y%m%d-%H%M%S")
+      ts=$(date "+%Y%m%d-%H%M%S")
+      _fetch $NAME $URL $PATH_Ext/$NAME.download-$ts.log
+
+      BUILD_PATH=$dirname/build-$ts
       mkdir -p $BUILD_PATH
       pushd $BUILD_PATH > /dev/null
       echo "    ($NAME) Configuring (`pwd`)"
@@ -194,18 +212,18 @@ if [ "$INSTALL_CGAL" = true ] ; then
             -DWITH_CGAL_Qt5:BOOL=OFF \
             -DWITH_GMP:BOOL=OFF \
             -DWITH_MPFR:BOOL=OFF \
-            .. > $PATH_Ext/$NAME.cmake.log 2>&1
+            .. > $PATH_Ext/$NAME.cmake-$ts.log 2>&1
 
       # build and install
       echo "    ($NAME) Building and Installing"
-      make -j$NPROCS > $PATH_Ext/$NAME.make.log 2>&1
-      make install -j$NPROCS > $PATH_Ext/$NAME.make.log 2>&1
+      make -j$NPROCS > $PATH_Ext/$NAME.make-$ts.log 2>&1
+      make install -j$NPROCS > $PATH_Ext/$NAME.make-$ts.log 2>&1
 
       # test the installation
-      if [ -f $TEST_FILE1 || $TEST_FILE2 ]; then
-        echo "   ($NAME) successfully installed at ($PATH_Ext)."
+      if [ -f ${TEST_FILE1} -o -f ${TEST_FILE2} ]; then
+        echo "    ($NAME) Successfully installed at ($PATH_Ext)."
       else
-        echo "   ($NAME) installation failed. Please see build logs in ($PATH_Ext) for more information."
+        echo "    ($NAME) Installation failed. Please see build logs in ($PATH_Ext) for more information."
       fi
       popd > /dev/null
     fi
@@ -221,7 +239,7 @@ if [ "$INSTALL_VTK" = true ] ; then
     NAME='VTK-8.1.2'
     FILE='VTK-8.1.2.tar.gz'
     URL="https://www.vtk.org/files/release/$VERSION/$FILE"
-    TEST_FILE="$PATH_Ext/lib/libvtkCommonCore-$VERSION.dylib"
+    TEST_FILE="$PATH_Ext/lib/libvtkCommonCore-$VERSION$shlib_extn"
 
     if [ -f $TEST_FILE ]; then
       echo "    ($NAME) Already installed. Found ($TEST_FILE)."
@@ -232,7 +250,7 @@ if [ "$INSTALL_VTK" = true ] ; then
       BUILD_PATH=$dirname/build-$(date "+%Y%m%d-%H%M%S")
       mkdir -p $BUILD_PATH
       pushd $BUILD_PATH > /dev/null
-      echo "   ($NAME) Configuring (`pwd`)"
+      echo "    ($NAME) Configuring (`pwd`)"
 
       cmake -DCMAKE_C_COMPILER=${CC_COMPILER} \
             -DCMAKE_CXX_COMPILER=${CXX_COMPILER} \
@@ -253,15 +271,15 @@ if [ "$INSTALL_VTK" = true ] ; then
             .. > $PATH_Ext/$NAME.cmake.log 2>&1
 
       # common functionality to build and install
-      echo "   ($NAME) Building and Installing"
+      echo "    ($NAME) Building and Installing"
       make -j$NPROCS > $PATH_Ext/$NAME.make.log 2>&1
       make install -j$NPROCS > $PATH_Ext/$NAME.make.log 2>&1
 
       # test the installation
       if [ -f $TEST_FILE ]; then
-          echo "   ($NAME) Successfully installed at ($PATH_Ext)."
+        echo "    ($NAME) Successfully installed at ($PATH_Ext)."
       else
-          echo "   ($NAME) Installation failed. Please see build logs in ($PATH_Ext) for more information."
+        echo "    ($NAME) Installation failed. Please see build logs in ($PATH_Ext) for more information."
       fi
       popd > /dev/null
     fi
