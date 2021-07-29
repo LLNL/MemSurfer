@@ -1,15 +1,15 @@
 *.DS_Store
 
-external
-build
+build*
 dist
 external
-*user
 
-*pyc
 memsurfer.egg-info
 memsurfer/memsurfer_cmod.py
 memsurfer/memsurfer_wrap.cpp
+
+*.user
+*.pyc
 
 *vtp
 *off
