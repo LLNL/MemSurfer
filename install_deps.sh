@@ -4,9 +4,9 @@
 # parameters to control this script!
 
 INSTALL_VTK=true
-INSTALL_CGAL=true
-INSTALL_BOOST=true
-INSTALL_EIGEN=true
+INSTALL_CGAL=false
+INSTALL_BOOST=false
+INSTALL_EIGEN=false
 NPROCS=20
 
 
@@ -41,7 +41,6 @@ command -v wget >/dev/null 2>&1 || { echo >&2 "Cannot find command 'wget'. Abort
 command -v tar >/dev/null 2>&1 || { echo >&2 "Cannot find command 'tar'. Aborting."; exit 1;    }
 command -v cmake >/dev/null 2>&1 || { echo >&2 "Cannot find command 'cmake'. Aborting."; exit 1;  }
 command -v swig >/dev/null 2>&1 || { echo >&2 "Cannot find command 'swig'. Aborting."; exit 1;  }
-command -v python3 >/dev/null 2>&1 || { echo >&2 "Cannot find command 'python3'. Aborting."; exit 1;  }
 command -v cython >/dev/null 2>&1 || { echo >&2 "Cannot find command 'cython'. Aborting."; exit 1;  }
 
 if [ -z "${CC_COMPILER}" ] ; then
@@ -50,13 +49,21 @@ fi
 if [ -z "${CXX_COMPILER}" ] ; then
     export CXX_COMPILER=`which g++`
 fi
-command -v "${CC_COMPILER}" >/dev/null 2>&1 || { echo >&2 "Cannot find C compiler '${CC_COMPILER}'. Aborting."; exit 1;  }
-command -v "${CXX_COMPILER}" >/dev/null 2>&1 || { echo >&2 "Cannot find CXX compiler '${CXX_COMPILER}'. Aborting."; exit 1;  }
-
-echo "    > Using gcc = (${CC_COMPILER})"
-echo "    > Using g++ = (${CXX_COMPILER})"
 export CC=${CC_COMPILER}
 export CXX=${CXX_COMPILER}
+export PYTHON=`which python`
+
+
+command -v "${CC}" >/dev/null 2>&1 || { echo >&2 "Cannot find C compiler '${CC}'. Aborting."; exit 1;  }
+command -v "${CXX}" >/dev/null 2>&1 || { echo >&2 "Cannot find CXX compiler '${CXX}'. Aborting."; exit 1;  }
+command -v "${PYTHON}" >/dev/null 2>&1 || { echo >&2 "Cannot find Python '${PYTHON}'. Aborting."; exit 1;  }
+
+CVERSION=`${CC} --version | head -n1`
+CXXVERSION=`${CXX} --version | head -n1`
+PYVERSION=`${PYTHON} --version`
+echo "    > Using gcc = (${CC}) [${CVERSION}]"
+echo "    > Using g++ = (${CXX}) [${CXXVERSION}]"
+echo "    > Using python = (${PYTHON}) [${PYVERSION}]"
 
 # ------------------------------------------------------------------------------
 # common utilities
@@ -158,7 +165,7 @@ if [ "$INSTALL_BOOST" = true ] ; then
 
       ./bootstrap.sh --prefix=$PATH_Ext \
                      --with-toolset=gcc \
-                     --with-python=`which python3` \
+                     --with-python=$PYTHON \
                      --with-libraries=atomic,thread,graph,chrono,date_time \
                      > $PATH_Ext/$NAME.bootstrap-$ts.log 2>&1
 
@@ -239,10 +246,13 @@ if [ "$INSTALL_VTK" = true ] ; then
     NAME='VTK-8.1.2'
     FILE='VTK-8.1.2.tar.gz'
     URL="https://www.vtk.org/files/release/$VERSION/$FILE"
-    TEST_FILE="$PATH_Ext/lib/libvtkCommonCore-$VERSION$shlib_extn"
+    TEST_FILE1="$PATH_Ext/lib/libvtkCommonCore-$VERSION$shlib_extn"
+    TEST_FILE2="$PATH_Ext/lib64/libvtkCommonCore-$VERSION$shlib_extn"
 
-    if [ -f $TEST_FILE ]; then
-      echo "    ($NAME) Already installed. Found ($TEST_FILE)."
+    if [ -f $TEST_FILE1 ]; then
+      echo "    ($NAME) Already installed. Found ($TEST_FILE1)."
+    elif [ -f $TEST_FILE2 ]; then
+      echo "    ($NAME) Already installed. Found ($TEST_FILE2)."
     else
       rm $PATH_Ext/$NAME.*.log 2>/dev/null
       _fetch $NAME $URL $PATH_Ext/$NAME.download.log
@@ -259,7 +269,7 @@ if [ "$INSTALL_VTK" = true ] ; then
             -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
             -DCMAKE_CXX_FLAGS:STRING="-Wno-inconsistent-missing-override -Wno-deprecated-declarations -Wno-dev -Wno-unknown-warning-option" \
             -DBUILD_SHARED_LIBS:BOOL=ON \
-            -DPYTHON_EXECUTABLE=`which python3` \
+            -DPYTHON_EXECUTABLE=$PYTHON \
             -DVTK_PYTHON_VERSION=3 \
             -DVTK_WRAP_PYTHON:BOOL=ON \
             -DVTK_Group_Rendering:BOOL=OFF \
@@ -276,7 +286,7 @@ if [ "$INSTALL_VTK" = true ] ; then
       make install -j$NPROCS > $PATH_Ext/$NAME.make.log 2>&1
 
       # test the installation
-      if [ -f $TEST_FILE ]; then
+      if [ -f ${TEST_FILE1} -o -f ${TEST_FILE2} ]; then
         echo "    ($NAME) Successfully installed at ($PATH_Ext)."
       else
         echo "    ($NAME) Installation failed. Please see build logs in ($PATH_Ext) for more information."
