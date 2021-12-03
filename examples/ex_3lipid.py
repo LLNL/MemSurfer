@@ -146,8 +146,8 @@ if __name__ == '__main__':
         LOGGER.info('Frame: %5d, Time: %8.3f ps' % (ts.frame, syst.trajectory.time))
 
         # Get all lipids in top/bot leaflets (including flip-flop lipids - therefore has to be done for each frame)
-        tp = top_head + defFlipFlopHeadgroups.select_atoms('around 12 fullgroup topsel', topsel=top_head)
-        bt = bot_head + defFlipFlopHeadgroups.select_atoms('around 12 fullgroup botsel', botsel=bot_head)
+        tp = top_head + defFlipFlopHeadgroups.select_atoms('around 12 global group topsel', topsel=top_head)
+        bt = bot_head + defFlipFlopHeadgroups.select_atoms('around 12 global group botsel', botsel=bot_head)
 
         if len(tp.select_atoms('group bt', bt=bt)):
             errmsg = 'Frame {}: {} common atoms between leaflets.'.format(syst.trajectory.frame, len(tp.select_atoms('group bt', bt=bt)))
