@@ -403,9 +403,6 @@ public:
         return mFields["point_areas"];
     }
 
-    //! Compute curvature (using vtk)
-    std::vector<TypeFunction> need_curvature(bool verbose = false);             // TriMesh_vtk.cpp
-
     //! compute the mesh as 2D Delaunay (using cgal)
     std::vector<TypeIndexI> delaunay(bool verbose = false);
     std::vector<TypeIndexI> periodicDelaunay(bool verbose = false);
@@ -469,9 +466,6 @@ public:
                              bool verbose = false);
 
     bool write_binary(const std::string &fname, const std::string &filter_fields="");
-
-    //! write in vtp (paraview) format with or without periodic face
-    bool write_vtp(const std::string &fname);
 };
 
 /// ---------------------------------------------------------------------------------------

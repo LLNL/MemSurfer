@@ -203,10 +203,10 @@ end_header\n'''.format(nv, nf)
 # ------------------------------------------------------------------------------
 # vtk i/o
 # ------------------------------------------------------------------------------
-import vtk
-from vtk.util import numpy_support
-
 def write2vtkpolydata(filename, verts, properties):
+
+    import vtk
+    from vtk.util import numpy_support
 
     LOGGER.info('Creating vtkdata and writing to [{}]'.format(filename))
 
@@ -228,6 +228,7 @@ def write2vtkpolydata(filename, verts, properties):
     for v in verts:
         if len(v) == 3:     points.InsertNextPoint(v[0], v[1], v[2])
         else:               points.InsertNextPoint(v[0], v[1], 0)
+
     polydata.SetPoints(points)
 
     # --------------------------------------------------------------------------
@@ -236,7 +237,6 @@ def write2vtkpolydata(filename, verts, properties):
         #fid = 0
         for f in faces:
             cell = vtk.vtkTriangle()
-
             is_periodic = False
 
             for i in range(3):
@@ -253,7 +253,14 @@ def write2vtkpolydata(filename, verts, properties):
             #fid+=1
             if not is_periodic:
                 cells.InsertNextCell(cell)
-        polydata.SetPolys(cells)
+            polydata.SetPolys(cells)
+
+    else:
+        for i in range(len(verts)):
+            cell = vtk.vtkVertex()
+            cell.GetPointIds().SetId(0, i)
+            cells.InsertNextCell(cell)
+        polydata.SetVerts(cells)
 
     # --------------------------------------------------------------------------
     for key in list(properties.keys()):
@@ -286,14 +293,6 @@ def write2vtkpolydata(filename, verts, properties):
             polydata.GetCellData().AddArray(VTK_data)
 
     # --------------------------------------------------------------------------
-    if 'faces' not in list(properties.keys()):
-        for i in range(len(verts)):
-            cell = vtk.vtkVertex()
-            cell.GetPointIds().SetId(0, i)
-            cells.InsertNextCell(cell)
-        polydata.SetPolys(cells)
-
-
     writer.SetInputData(polydata)
     writer.Write()
     LOGGER.info('File [{}] successfully written.'.format(filename))

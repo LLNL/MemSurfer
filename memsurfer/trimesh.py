@@ -266,22 +266,46 @@ class TriMesh(object):
         if self.mean_curv.shape != (0,):
             return (self.mean_curv, self.gaus_curv)
 
+        import vtk
+        from vtk.util.numpy_support import vtk_to_numpy
+
         LOGGER.info('{} Computing curvatures'.format(self.tag()))
         mtimer = Timer()
 
-        rval = self.tmesh.need_curvature(self.cverbose)
-        if len(rval) != 2*self.nverts:
-            raise ValueError('Incorrect curvature!')
+        # create a polydata mesh
+        polydata = vtk.vtkPolyData()
+        points = vtk.vtkPoints()
+        cells = vtk.vtkCellArray()
+        for v in self.vertices:
+            if len(v) == 3:
+                points.InsertNextPoint(v[0], v[1], v[2])
+            else:
+                points.InsertNextPoint(v[0], v[1], 0)
 
-        self.mean_curv = np.zeros(self.nverts,)
-        self.gaus_curv = np.zeros(self.nverts,)
+        polydata.SetPoints(points)
 
-        for i in range(self.nverts):
-            self.mean_curv[i] = rval[i]
-            self.gaus_curv[i] = rval[self.nverts + i]
+        for f in self.faces:
+            cell = vtk.vtkTriangle()
+            #is_periodic = False
 
-        self.mean_curv = self.mean_curv.astype(np.float32)
-        self.gaus_curv = self.gaus_curv.astype(np.float32)
+            for i in range(3):
+                cell.GetPointIds().SetId(i, f[i])
+            cells.InsertNextCell(cell)
+        polydata.SetPolys(cells)
+
+        # use vtk to compute curvature
+        mc = vtk.vtkCurvatures()
+        mc.SetInputData(polydata)
+        mc.SetCurvatureTypeToMean()
+        mc.Update()
+
+        gc = vtk.vtkCurvatures()
+        gc.SetInputData(polydata)
+        gc.SetCurvatureTypeToGaussian()
+        gc.Update()
+
+        self.mean_curv = vtk_to_numpy(mc.GetOutput().GetPointData().GetArray('Mean_Curvature'))
+        self.gaus_curv = vtk_to_numpy(gc.GetOutput().GetPointData().GetArray('Gauss_Curvature'))
 
         mtimer.end()
         LOGGER.info('{} Computed {} x2 curvatures! took {}'.format(self.tag(), self.nverts, mtimer))
@@ -366,12 +390,10 @@ class TriMesh(object):
                 properties['pnormals'] = self.pnormals
             if self.pareas.shape != (0,):
                 properties['pareas'] = self.pareas
-            '''
             if self.mean_curv.shape != (0,):
                 properties['mean_curv'] = self.mean_curv
             if self.gaus_curv.shape != (0,):
                 properties['gaus_curv'] = self.gaus_curv
-            '''
         else:
             def append(a,b):
                 return np.concatenate((a,b), axis=0)
