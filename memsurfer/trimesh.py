@@ -1,4 +1,4 @@
-'''
+"""
 Copyright (c) 2019, Lawrence Livermore National Security, LLC.
 Produced at the Lawrence Livermore National Laboratory.
 Written by Harsh Bhatia (hbhatia@llnl.gov) and Peer-Timo Bremer (bremer5@llnl.gov)
@@ -7,117 +7,242 @@ LLNL-CODE-763493. All rights reserved.
 This file is part of MemSurfer, Version 1.0.
 Released under GNU General Public License 3.0.
 For details, see https://github.com/LLNL/MemSurfer.
-'''
+"""
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-
 import numpy as np
+import vtk
+from vtk.util import numpy_support
+
 import logging
 LOGGER = logging.getLogger(__name__)
 
 from . import memsurfer_cmod
 from .utils import Timer
 
+
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 class TriMesh(object):
-    '''
+    """
        Class to create and manipulate triangular meshes (in 2D and 3D)
-    '''
+    """
 
     # --------------------------------------------------------------------------
     # constructor
     def __init__(self, vertices, **kwargs):
-        '''
+        """
         vertices: ndarray of shape (nverts, dim) # dim = 2,3
         kwargs:
                   faces: ndarray of shape (nfaces,3)
                   label: label for this mesh
                   periodic: whether this mesh is periodic
-        '''
-        if vertices.shape[1]!= 2 and vertices.shape[1]!= 3:
-            raise ValueError('TriMesh needs 2D or 3D vertices: ndarray (npoints, 2/3)')
+        """
+        if vertices.shape[1] not in [2,3]:
+            raise ValueError(f'TriMesh needs 2D or 3D vertices: got {vertices.shape}')
 
         self.vertices = vertices.astype(np.float32)
-        self.nverts = self.vertices.shape[0]
-
-        self.periodic = kwargs.get('periodic', False)
         self.tmesh = memsurfer_cmod.TriMesh(self.vertices)
 
+        if 'faces' in list(kwargs.keys()):
+            self.faces = kwargs['faces']
+            self.faces = self.faces.astype(np.uint32)
+            if self.faces.shape[1] != 3:
+                raise ValueError(f'TriMesh needs triangles: got {faces.shape}')
+            self.tmesh.set_faces(self.faces)
+
+        else:
+            self.faces = None
+
+        self.periodic = kwargs.get('periodic', False)
         if self.periodic:
             self.tmesh.set_periodic()
             self.label = kwargs.get('label', 'TriMeshPeriodic')
         else:
             self.label = kwargs.get('label', 'TriMesh')
 
-        self.nfaces = 0
-        if 'faces' in list(kwargs.keys()):
-            self.faces = kwargs['faces']
-            self.faces = self.faces.astype(np.uint32)
-            self.nfaces = self.faces.shape[0]
-
-            if (self.faces.shape[1] != 3):
-                raise ValueError('TriMesh needs triangles: ndarray (nfaces, 3)')
-
-            self.tmesh.set_faces(self.faces)
-
-        LOGGER.info('{} Created {} vertices and {} faces'
-                    .format(self.tag(), self.nverts, self.nfaces))
-
-        # properties to be computed
-        self.pnormals = np.empty((0,0))
-        self.pareas = np.empty(0)
-        self.mean_curv = np.empty(0)
-        self.gaus_curv = np.empty(0)
-        self.pverts = np.empty((0,0))
+        nfaces = self.faces.shape[0] if self.faces is not None else 0
+        LOGGER.info(f'{self.tag()} Created {self.vertices.shape} vertices and {nfaces} faces')
         self.cverbose = LOGGER.isEnabledFor(logging.DEBUG)
+
+        # other parameters that will be created later!
+        self.bbox = None            # bounding box
+
+        self.pnormals = None        # point normals
+        self.pareas = None          # point areas
+        self.mean_curv = None       # mean curvature
+        self.gaus_curv = None       # gaussian curvature
+
+        self.pverts = None          # parameterized vertices
+        self.pfaces = None          # periodic faces
+        self.tfaces = None          # trimmed faces
+        self.dverts = None          # duplicated verts
+
+    # --------------------------------------------------------------------------
+    def tag(self):
+        return f'[{self.label}, periodic={self.periodic}]'
+
+    def __str__(self):
+        return f'{self.tag()}: ' \
+               f'{self.vertices.shape[0]} verts, ' \
+               f'{self.faces.shape[0]} faces. ' \
+               f'bbox = {self.vertices.min(axis=0)}, {self.vertices.max(axis=0)}'
+
+    def __repr__(self):
+        return self.__str__()
 
     # --------------------------------------------------------------------------
     def set_bbox(self, bb0, bb1):
 
         if bb0.shape[0] == 2 and bb1.shape[0] == 2:
-            self.bbox = np.array([bb0[0], bb0[1],  bb1[0], bb1[1]])
-            self.boxw = np.array([bb1[0] - bb0[0], bb1[1] - bb0[1]])
+            self.bboxl = np.array([bb0[0], bb0[1],  bb1[0], bb1[1]])
+            self.bbox = np.array([[bb0[0], bb0[1], 0.], [bb1[0], bb1[1], 0.]])
 
         elif bb0.shape[0] == 3 and bb1.shape[0] == 3:
-            self.bbox = np.array([bb0[0], bb0[1], bb0[2], bb1[0], bb1[1], bb1[2]])
-            self.boxw = np.array([bb1[0]-bb0[0], bb1[1]-bb0[1], bb1[2]-bb0[2]])
+            self.bboxl = np.array([bb0[0], bb0[1], bb0[2], bb1[0], bb1[1], bb1[2]])
+            self.bbox = np.array([[bb0[0], bb0[1], bb0[2]], [bb1[0], bb1[1], bb1[2]]])
 
         else:
-            raise ValueError('TriMesh got incorrect bbox: {}, {}'.format(bb0, bb1))
+            raise ValueError(f'TriMesh got incorrect bbox: {bb0}, {bb1}')
 
         self.bbox = self.bbox.astype(np.float32)
-        self.boxw = self.boxw.astype(np.float32)
-        LOGGER.info('{} setting bbox = {}'.format(self.tag(), self.bbox))
-        self.tmesh.set_bbox(self.bbox)
+        LOGGER.info(f'{self.tag()} Setting bbox = {self.bbox[0]}, {self.bbox[1]}')
+        self.tmesh.set_bbox(self.bboxl)
 
     # --------------------------------------------------------------------------
+    def as_vtkpolydata(self, props_to_include = [], additional_props = {}):
 
-    def copy_triangulation(self, mesh):
+        LOGGER.info(f'{self.tag()} Converting to vtk '
+                    f'(include={props_to_include}, '
+                    f'additional={list(additional_props.keys())})')
 
-        assert(self.periodic == mesh.periodic)
+        polydata = vtk.vtkPolyData()
+        points = vtk.vtkPoints()
+        cells = vtk.vtkCellArray()
 
-        self.tmesh.copy_periodicDelaunay(mesh.tmesh)
-        self.faces = self.tmesh.get_faces()
-        self.faces = np.array(self.faces).reshape(-1,3).astype(np.uint32)
+        # ----------------------------------------------------------------------
+        if not self.periodic:
+            verts = self.vertices
+            faces = self.faces
+            dids = np.array([], dtype=np.uint32)
+        else:
+            verts = np.concatenate((self.vertices, self.dverts), axis=0)
+            faces = np.concatenate((self.faces, self.tfaces), axis=0)
+            dids = np.array(self.tmesh.duplicate_ids(), dtype=np.uint32)
 
-        if self.periodic:
-            self.pfaces = self.tmesh.periodic_faces()
-            self.tfaces = self.tmesh.trimmed_faces()
-            self.dverts = self.tmesh.duplicated_vertices()
+        # ----------------------------------------------------------------------
+        # convert points
+        if verts.shape[1] == 2:
+            for v in verts:
+                points.InsertNextPoint(v[0], v[1], 0.)
+        else:
+            for v in verts:
+                points.InsertNextPoint(v[0], v[1], v[2])
+        polydata.SetPoints(points)
 
-            self.pfaces = np.array(self.pfaces).reshape(-1,3).astype(np.uint32)
-            self.tfaces = np.array(self.tfaces).reshape(-1,3).astype(np.uint32)
-            self.dverts = np.array(self.dverts).reshape(-1,self.vertices.shape[1]).astype(np.float32)
+        # ----------------------------------------------------------------------
+        # if faces are available, create polygons
+        if faces is not None:
+            if not self.periodic:
+                for f in faces:
+                    cell = vtk.vtkTriangle()
+                    for i in range(3):
+                        cell.GetPointIds().SetId(i, f[i])
+                    cells.InsertNextCell(cell)
 
+            else:
+                xw = 0.5 * (self.bbox[1,0] - self.bbox[0,0])
+                yw = 0.5 * (self.bbox[1,1] - self.bbox[0,1])
+
+                for f in faces:
+                    is_periodic = False
+                    cell = vtk.vtkTriangle()
+                    for i in range(3):
+                        cell.GetPointIds().SetId(i, f[i])
+
+                        p = polydata.GetPoint(f[i])
+                        q = polydata.GetPoint(f[(i + 1) % 3])
+                        is_periodic |= abs(p[0]-q[0]) > xw or \
+                                       abs(p[1]-q[1]) > yw
+
+                    if not is_periodic:
+                        cells.InsertNextCell(cell)
+            polydata.SetPolys(cells)
+
+        # ----------------------------------------------------------------------
+        # if faces are not available, each point is a vtk vertex
+        else:
+            for i in range(self.vertices.shape[0]):
+                cell = vtk.vtkVertex()
+                cell.GetPointIds().SetId(0, i)
+                cells.InsertNextCell(cell)
+            polydata.SetVerts(cells)
+
+        # ----------------------------------------------------------------------
+        def _add_to_polydata(_name, _data):
+
+            # everything must be a numpy array
+            if not isinstance(_data, np.ndarray):
+                _data = np.array([_data])
+
+            # duplicate if needed, if this is point data
+            if _data.shape[0] == self.vertices.shape[0] and dids.shape[0] > 0:
+                _data = np.concatenate((_data, _data[dids]), axis=0)
+
+            if _data.dtype.kind not in ['U', 'S']:
+                _vtkdata = numpy_support.numpy_to_vtk(num_array=_data)
+
+            else:
+                _vtkdata = vtk.vtkStringArray()
+                _vtkdata.SetNumberOfValues(_data.shape[0])
+                for i, v in enumerate(_data):
+                    _vtkdata.SetValue(i, str(v))
+
+            _vtkdata.SetName(_name)
+
+            # now, where does this need to go?
+            if _data.shape[0] == 1:
+                polydata.GetFieldData().AddArray(_vtkdata)
+
+            elif _data.shape[0] == points.GetNumberOfPoints():
+                polydata.GetPointData().AddArray(_vtkdata)
+
+            elif _data.shape[0] == cells.GetNumberOfCells():
+                polydata.GetCellData().AddArray(_vtkdata)
+
+            else:
+                LOGGER.warning(f'Could not add {_name} with size {_data.shape}')
+
+        # ----------------------------------------------------------------------
+        if 'pnormals' in props_to_include and self.pnormals is not None:
+            _add_to_polydata('pnormals', self.pnormals)
+
+        if 'pareas' in props_to_include and self.pareas is not None:
+            _add_to_polydata('pareas', self.pareas)
+
+        if 'mean_curv' in props_to_include and self.mean_curv is not None:
+            _add_to_polydata('mean_curv', self.mean_curv)
+
+        if 'gaus_curv' in props_to_include and self.gaus_curv is not None:
+            _add_to_polydata('gaus_curv', self.gaus_curv)
+
+        for k, v in additional_props.items():
+            _add_to_polydata(k, v)
+
+        # ----------------------------------------------------------------------
+        LOGGER.info(f'{self.tag()} Converted to vtk polydata')
+        return polydata
+
+    # --------------------------------------------------------------------------
+    # mesh manupulation
     # --------------------------------------------------------------------------
     def parameterize(self, xy=False):
 
-        if self.pverts.shape != (0,0):
+        if self.pverts is not None:
             return self.pverts
 
-        LOGGER.info('{} Parameterizing the surface'.format(self.tag()))
+        LOGGER.info(f'{self.tag()} Parameterizing the surface')
         mtimer = Timer()
 
         if xy:
@@ -126,22 +251,22 @@ class TriMesh(object):
             pverts = self.tmesh.parameterize(self.cverbose)
 
         self.pverts = np.array(pverts).reshape(-1, 2).astype(np.float32)
-        assert self.pverts.shape[0] == self.nverts
+        assert self.pverts.shape[0] == self.vertices.shape[0]
 
         mtimer.end()
-        LOGGER.info('{} Parameterization took {}'.format(self.tag(), mtimer))
+        LOGGER.info(f'{self.tag()} Parameterization took {mtimer}')
         return self.pverts
 
     # --------------------------------------------------------------------------
     def project_on_surface_and_plane(self, points):
-        '''
+        """
         Project a set of points (given as barycentric coordinates and face ids)
-            onto the triangulation, and parameterized triangulation
-        '''
+            onto the triangulation and the parameterized triangulation
+        """
         self.parameterize()
 
         npoints = points.shape[0]
-        LOGGER.info('{} Projecting {} points on the parameterized surface'.format(self.tag(), npoints))
+        LOGGER.info(f'{self.tag()} Projecting {npoints} points on the parameterized surface')
 
         mtimer = Timer()
 
@@ -159,15 +284,14 @@ class TriMesh(object):
 
             f = self.faces[fids[i]]
             for j in range(3):
-
                 spoints[i] += fbarys[i][j] * self.vertices[f[j]]
                 ppoints[i] += fbarys[i][j] * self.pverts[f[j]]
 
         mtimer.end()
-        LOGGER.info('{} Projecting took {}'.format(self.tag(), mtimer))
-        LOGGER.info('\tbbox of planar projections: {}, {}'.format(ppoints.min(axis=0), ppoints.max(axis=0)))
-        LOGGER.info('\tbbox of surface projections: {}, {}'.format(spoints.min(axis=0), spoints.max(axis=0)))
-        return (spoints, ppoints)
+        LOGGER.info(f'{self.tag()} Projecting took {mtimer}')
+        LOGGER.info(f'\tbbox of planar projections: {ppoints.min(axis=0)}, {ppoints.max(axis=0)}')
+        LOGGER.info(f'\tbbox of surface projections: {spoints.min(axis=0)}, {spoints.max(axis=0)}')
+        return spoints, ppoints
 
     # --------------------------------------------------------------------------
     '''
@@ -189,21 +313,20 @@ class TriMesh(object):
     # --------------------------------------------------------------------------
     def delaunay(self):
 
-        if self.nfaces > 0:
+        if self.faces is not None:
             return
 
         tag = ' periodic ' if self.periodic else ' '
-        LOGGER.info('{} Computing 2D{}Delaunay triangulation.'.format(self.tag(), tag))
+        LOGGER.info(f'{self.tag()} Computing 2D{tag}Delaunay triangulation')
         mtimer = Timer()
 
         faces = self.tmesh.delaunay(self.cverbose)
         self.faces = np.array(faces).reshape(-1, 3).astype(np.uint32)
-        self.nfaces = self.faces.shape[0]
 
         if not self.periodic:
             mtimer.end()
-            LOGGER.info('{} Delaunay triangulation took {}! created {} faces, and {} vertices.'
-            .format(self.tag(), mtimer, self.nfaces, self.nverts))
+            LOGGER.info(f'{self.tag()} Delaunay triangulation took {mtimer}! '
+                        f'created {self.faces.shape[0]} faces and {self.vertices.shape[0]} vertices')
             return
 
         # handle duplicated elements
@@ -217,81 +340,61 @@ class TriMesh(object):
         self.dverts = np.array(dverts).reshape(-1, self.vertices.shape[1]).astype(np.float32)
 
         mtimer.end()
+        LOGGER.info(f'{self.tag()} Delaunay triangulation took {mtimer}! '
+                    f'created [{self.faces.shape[0]} {self.pfaces.shape[0]} {self.tfaces.shape[0]}] faces, '
+                    f'and [{self.vertices.shape[0]} {self.dverts.shape[0]}] vertices')
 
-        LOGGER.info('{} Delaunay triangulation took {}! created [{} {} {}] faces, and [{} {}] vertices.'
-                    .format(self.tag(), mtimer, self.nfaces, self.pfaces.shape[0], self.tfaces.shape[0], self.nverts, self.dverts.shape[0]))
-
-
+    # --------------------------------------------------------------------------
+    # computation of properties!
     # --------------------------------------------------------------------------
     def compute_normals(self):
 
-        if self.pnormals.shape != (0,0):
+        if self.pnormals is not None:
             return self.pnormals
 
-        LOGGER.info('{} Computing normals'.format(self.tag()))
+        LOGGER.info(f'{self.tag()} Computing normals')
         mtimer = Timer()
 
         rval = self.tmesh.need_normals(self.cverbose)
-        if len(rval) != 3*self.nverts:
+        if len(rval) != 3*self.vertices.shape[0]:
             raise ValueError('Incorrect normals!')
 
         self.pnormals = np.asarray(rval).reshape(-1,3).astype(np.float32)
 
         mtimer.end()
-        LOGGER.info('{} Computed {} normals! took {}'.format(self.tag(), self.pnormals.shape[0], mtimer))
+        LOGGER.info(f'{self.tag()} Computed {self.pnormals.shape[0]} normals! took {mtimer}')
         return self.pnormals
 
     # --------------------------------------------------------------------------
     def compute_pointareas(self):
 
-        if self.pareas.shape != (0,):
+        if self.pareas is not None:
             return self.pareas
 
-        LOGGER.info('{} Computing point areas'.format(self.tag()))
+        LOGGER.info(f'{self.tag()} Computing point areas')
         mtimer = Timer()
 
         rval = self.tmesh.need_pointareas(self.cverbose)
-        if len(rval) != self.nverts:
+        if len(rval) != self.vertices.shape[0]:
             raise ValueError('Incorrect point areas!')
 
         self.pareas = np.array(rval).astype(np.float32)
 
         mtimer.end()
-        LOGGER.info('{} Computed {} point areas! took {}'.format(self.tag(), self.pareas.shape[0], mtimer))
+        LOGGER.info(f'{self.tag()} Computed {self.pareas.shape[0]} areas! took {mtimer}')
         return self.pareas
 
     # --------------------------------------------------------------------------
     def compute_curvatures(self):
 
-        if self.mean_curv.shape != (0,):
-            return (self.mean_curv, self.gaus_curv)
+        if self.mean_curv is not None and self.gaus_curv is not None:
+            return self.mean_curv, self.gaus_curv
 
-        import vtk
-        from vtk.util.numpy_support import vtk_to_numpy
-
-        LOGGER.info('{} Computing curvatures'.format(self.tag()))
+        LOGGER.info(f'{self.tag()} Computing curvature')
         mtimer = Timer()
 
-        # create a polydata mesh
-        polydata = vtk.vtkPolyData()
-        points = vtk.vtkPoints()
-        cells = vtk.vtkCellArray()
-        for v in self.vertices:
-            if len(v) == 3:
-                points.InsertNextPoint(v[0], v[1], v[2])
-            else:
-                points.InsertNextPoint(v[0], v[1], 0)
-
-        polydata.SetPoints(points)
-
-        for f in self.faces:
-            cell = vtk.vtkTriangle()
-            #is_periodic = False
-
-            for i in range(3):
-                cell.GetPointIds().SetId(i, f[i])
-            cells.InsertNextCell(cell)
-        polydata.SetPolys(cells)
+        # convert into vtk polydata
+        polydata = self.as_vtkpolydata()
 
         # use vtk to compute curvature
         mc = vtk.vtkCurvatures()
@@ -304,12 +407,12 @@ class TriMesh(object):
         gc.SetCurvatureTypeToGaussian()
         gc.Update()
 
-        self.mean_curv = vtk_to_numpy(mc.GetOutput().GetPointData().GetArray('Mean_Curvature'))
-        self.gaus_curv = vtk_to_numpy(gc.GetOutput().GetPointData().GetArray('Gauss_Curvature'))
+        self.mean_curv = numpy_support.vtk_to_numpy(mc.GetOutput().GetPointData().GetArray('Mean_Curvature'))
+        self.gaus_curv = numpy_support.vtk_to_numpy(gc.GetOutput().GetPointData().GetArray('Gauss_Curvature'))
 
         mtimer.end()
-        LOGGER.info('{} Computed {} x2 curvatures! took {}'.format(self.tag(), self.nverts, mtimer))
-        return (self.mean_curv, self.gaus_curv)
+        LOGGER.info(f'{self.tag()} Computed {self.vertices.shape[0]} x2 curvatures! took {mtimer}')
+        return self.mean_curv, self.gaus_curv
 
     # --------------------------------------------------------------------------
     def compute_distance_to_surface(self, other):
@@ -322,14 +425,10 @@ class TriMesh(object):
         if type < 1 or type > 3:
             raise InvalidArgument('Invalid density type, {}. Should be 1 (geodesic), 2 (2D) or 3 (3D)'.format(type))
 
-        cnt = self.nverts
-        tag = 'all (of {})'.format(cnt)
+        cnt = f'all (of {self.vertices.shape[0]})' if len(pidxs) == 0 else \
+              f'{len(pidxs)} (of {self.vertices.shape[0]})'
 
-        if len(pidxs) > 0:
-            cnt = len(pidxs)
-            tag = '{} (of {})'.format(cnt, self.nverts)
-
-        LOGGER.info('{} Estimating density of {} points [name = {}]'.format(self.tag(), tag, name))
+        LOGGER.info(f'{self.tag()} Estimating density of {cnt} points [name = {name}]')
         mtimer = Timer()
 
         # ----------------------------------------------------------------------
@@ -344,7 +443,7 @@ class TriMesh(object):
         # ----------------------------------------------------------------------
         # based on periodicity, choose the correct distance kernel!
         if self.periodic:
-            dist_kern = memsurfer_cmod.DistancePeriodicXYSquared(self.bbox)
+            dist_kern = memsurfer_cmod.DistancePeriodicXYSquared(self.bboxl)
         else:
             dist_kern = memsurfer_cmod.DistanceSquared()
 
@@ -354,103 +453,48 @@ class TriMesh(object):
         d = np.asarray(d, dtype=np.float32)
 
         mtimer.end()
-        LOGGER.info('{} Computed density! took {}'.format(self.tag(), mtimer))
-        LOGGER.info('\trange = [{}, {}], sum = {}'.format(d.min(), d.max(), d.sum()))
+        LOGGER.info(f'{self.tag()} Computed density! took {mtimer}')
+        LOGGER.info(f'\trange = [{d.min()}, {d.max()}], sum = {d.sum()}')
 
         # ----------------------------------------------------------------------
         return d
 
     # --------------------------------------------------------------------------
-    def tag(self):
-        return '[{}, periodic={}]'.format(self.label, self.periodic)
-
-    def display(self):
-        LOGGER.info('{}: {} verts, {} faces. bbox = {}, {}'
-                    .format(self.tag(), self.nverts, self.nfaces,
-                    self.vertices.min(axis=0), self.vertices.max(axis=0)))
-
     # --------------------------------------------------------------------------
-    # --------------------------------------------------------------------------
+    def copy_triangulation(self, mesh):
+
+        if self.periodic != mesh.periodic:
+            raise ValueError(f'Cannot copy a (periodic={self.periodic}) mesh into ({mesh.periodic})')
+
+        self.tmesh.copy_periodicDelaunay(mesh.tmesh)
+        self.faces = self.tmesh.get_faces()
+        self.faces = np.array(self.faces).reshape(-1, 3).astype(np.uint32)
+
+        if self.periodic:
+            self.pfaces = self.tmesh.periodic_faces()
+            self.tfaces = self.tmesh.trimmed_faces()
+            self.dverts = self.tmesh.duplicated_vertices()
+
+            self.pfaces = np.array(self.pfaces).reshape(-1, 3).astype(np.uint32)
+            self.tfaces = np.array(self.tfaces).reshape(-1, 3).astype(np.uint32)
+            self.dverts = np.array(self.dverts).reshape(-1, self.vertices.shape[1]).astype(np.float32)
+
     def copy_densities(self, mesh):
         self.tmesh.set_fields(mesh.tmesh, 'density')
 
-    def write_binary(self, filename, filter_fields):
-        LOGGER.info('{} Write binary with fields = [{}]'.format(self.tag(), filter_fields))
-        self.tmesh.write_binary(filename, filter_fields)
-
-    def write_vtp(self, filename, properties={}):
-
-        duplicate_verts = False
-
-        if not self.periodic or not duplicate_verts:
-            verts = self.vertices
-            properties['faces'] = self.faces
-
-            if self.pnormals.shape != (0,0):
-                properties['pnormals'] = self.pnormals
-            if self.pareas.shape != (0,):
-                properties['pareas'] = self.pareas
-            if self.mean_curv.shape != (0,):
-                properties['mean_curv'] = self.mean_curv
-            if self.gaus_curv.shape != (0,):
-                properties['gaus_curv'] = self.gaus_curv
-        else:
-            def append(a,b):
-                return np.concatenate((a,b), axis=0)
-
-            def append_dups(a,dids):
-                return append(a, a[dids])
-
-            dids = self.tmesh.duplicate_ids()
-            dids = np.array(dids, dtype=np.uint32)
-
-            verts = append(self.vertices, self.dverts)
-            properties['faces'] = append(self.faces, self.tfaces)
-
-            if self.pnormals.shape != (0,0):
-                properties['pnormals'] = append_dups(self.pnormals, dids)
-            if self.pareas.shape != (0,):
-                properties['pareas'] = append_dups(self.pareas, dids)
-            '''
-            if self.mean_curv.shape != (0,):
-                properties['mean_curv'] = append_dups(self.mean_curv, dids)
-            if self.gaus_curv.shape != (0,):
-                properties['gaus_curv'] = append_dups(self.gaus_curv, dids)
-            '''
-        from .utils import write2vtkpolydata
-        if self.periodic:
-            properties['bbox'] = self.boxw
-
-        write2vtkpolydata(filename, verts, properties)
-
     # --------------------------------------------------------------------------
-    def write_off(self, filename):
+    def write_vtp(self, filename, additional_props={}):
 
-        from .utils import write_off
+        # 4x properties are stored in the python object
+        props_to_include = ['pnormals', 'pareas', 'mean_curv', 'gaus_curv']
 
-        verts = self.vertices
-        faces = self.faces
+        polydata = self.as_vtkpolydata(props_to_include, additional_props)
 
-        if self.periodic:
-            faces = np.vstack((faces, self.pfaces))
-            #verts = np.vstack((verts, self.dverts[:,0:verts.shape[1]]))
-            #faces = np.vstack((faces, self.tfaces))
-
-        write_off(filename, verts, faces)
-
-    # --------------------------------------------------------------------------
-    def write_ply(self, filename):
-
-        from .utils import write_off
-
-        verts = self.vertices
-        faces = self.faces
-
-        if self.periodic:
-            #verts = np.vstack((verts, self.dverts[:,0:verts.shape[1]]))
-            faces = np.vstack((faces, self.tfaces))
-
-        write_ply(filename, self.vertices, self.faces)
+        writer = vtk.vtkXMLPolyDataWriter()
+        writer.SetFileName(filename)
+        writer.SetInputData(polydata)
+        writer.Write()
+        LOGGER.info(f'{self.tag()} Written to ({filename})')
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-'''
+"""
 Copyright (c) 2019, Lawrence Livermore National Security, LLC.
 Produced at the Lawrence Livermore National Laboratory.
 Written by Harsh Bhatia (hbhatia@llnl.gov) and Peer-Timo Bremer (bremer5@llnl.gov)
@@ -7,7 +7,7 @@ LLNL-CODE-763493. All rights reserved.
 This file is part of MemSurfer, Version 1.0.
 Released under GNU General Public License 3.0.
 For details, see https://github.com/LLNL/MemSurfer.
-'''
+"""
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
@@ -25,14 +25,14 @@ from .utils import Timer
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 class Membrane(object):
-    '''
+    """
        Class to create and manipulate membrane surfaces
-    '''
+    """
 
     # --------------------------------------------------------------------------
     # constructor
     def __init__(self, points, **kwargs):
-        '''
+        """
         points: ndarray of shape (npoints, 3)
         kwargs:
                 labels:         label for each point
@@ -41,10 +41,10 @@ class Membrane(object):
                                     required for periodic domain
                 boundary_layer: float value for boundary layer thickess (default: 0.2)
                                     used only for periodic domain
-        '''
+        """
         # 3d points
-        if points.shape[1]!= 3:
-            raise ValueError('Membrane needs 3D points: ndarray (npoints, 3)')
+        if points.shape[1] !=  3:
+            raise ValueError(f'Membrane needs 3D points: got {points.shape}')
 
         self.points = points
         self.npoints = self.points.shape[0]
@@ -59,7 +59,7 @@ class Membrane(object):
         # bounding box may be not given, but is needed for periodicity
         if 'bbox' in list(kwargs.keys()):
             self.bbox = kwargs['bbox']
-            if self.bbox.shape[0]!= 2 and self.bbox.shape[1] != 3:
+            if self.bbox.shape[0] not in [2, 3]:
                 raise ValueError('Membrane needs 3D bounding box: ndarray (2 ,3)')
 
         # labels for points
@@ -68,27 +68,36 @@ class Membrane(object):
             if self.labels.shape[0] != self.npoints or len(self.labels.shape) > 1:
                 raise ValueError('Membrane expects one label per point')
         else:
-            self.labels = np.empty((0,0))
+            self.labels = None
 
-        LOGGER.info('Initializing Membrane with {} points'.format(self.points.shape))
-        LOGGER.info('\t actual bbox   = {} {}'.format(self.points.min(axis=0),self.points.max(axis=0)))
-        if self.periodic  and 'bbox' in list(kwargs.keys()):
-            LOGGER.info('\t given periodic bbox = {} {}'.format(self.bbox[0], self.bbox[1]))
+        LOGGER.info(f'Initializing Membrane with {self.points.shape} points')
+        LOGGER.info(f'\t actual bbox = {self.points.min(axis=0)} {self.points.max(axis=0)}')
+        if self.periodic and 'bbox' in list(kwargs.keys()):
+            LOGGER.info(f'\t given periodic bbox = {self.bbox[0]} {self.bbox[1]}')
 
         # create point set object
         self.points = self.points.astype(np.float32)
         self.bbox = self.bbox.astype(np.float32)
         self.pset = memsurfer_cmod.PointSet(self.points)
-        self.pnormals = np.empty((0,0))
+
+        # different constructs we will comptue
+        self.pnormals = None
+        self.spoints = None
+        self.ppoints = None
+
+        self.surf_poisson = None
+        self.memb_planar = None
+        self.memb_smooth = None
+        self.memb_exact = None
 
         # other properties
         self.properties = {}
 
     # --------------------------------------------------------------------------
     def fit_points_to_box_xy(self):
-        '''
+        """
             Fit the points in a periodic domain to the given bounding box
-        '''
+        """
         nadjusted = 0
         boxw = self.bbox[1,:] - self.bbox[0,:]
         for d in range(2):
@@ -104,16 +113,16 @@ class Membrane(object):
                 nadjusted += r.shape[0]
 
         if nadjusted > 0:
-            LOGGER.info('\t adjusted bbox = {} {}'.format(self.points.min(axis=0), self.points.max(axis=0)))
+            LOGGER.info(f'\t adjusted bbox = {self.points.min(axis=0)} {self.points.max(axis=0)}')
 
         return nadjusted
 
     # --------------------------------------------------------------------------
     def compute_pnormals(self, knbrs=18, ndir_hint=+1):
-        '''
+        """
             Estimate normals for the point set, using k nearest neighhbors
-        '''
-        if self.pnormals.shape != (0,0):
+        """
+        if self.pnormals is not None:
             return self.pnormals
 
         cverbose = LOGGER.isEnabledFor(logging.DEBUG)
@@ -128,7 +137,7 @@ class Membrane(object):
         self.pset.need_normals(knbrs, cverbose)
         normals = self.pset.get_normals()
         if len(normals) != 3*self.npoints:
-            raise ValueError('PointSet computed incorrect normals (got {} values}'.len(normals))
+            raise ValueError(f'PointSet computed incorrect normals (got {len(normals)} values')
 
         self.pnormals = np.array(normals).reshape(self.npoints, 3)
         self.pnormals = self.pnormals.astype(np.float32)
@@ -140,27 +149,27 @@ class Membrane(object):
             self.pnormals *= -1.0
 
         mtimer.end()
-        LOGGER.info('Computed {} normals! took {}'.format(self.pnormals.shape, mtimer))
-        LOGGER.info('\t normals = {} {}'.format(self.pnormals.min(axis=0),self.pnormals.max(axis=0)))
+        LOGGER.info(f'Computed {self.pnormals.shape} normals! took {mtimer}')
+        LOGGER.info(f'\t normals = {self.pnormals.min(axis=0)}, {self.pnormals.max(axis=0)}')
         return self.pnormals
 
     # --------------------------------------------------------------------------
     def compute_approx_surface(self, exactness_level=10):
-        '''
+        """
             Compute an approximating surface using Poisson recronstruction
                 exactness_level:  controls the smoothness
                         larger exactness_level will fit the points more --> less smooth
-        '''
+        """
         self.compute_pnormals()
 
-        LOGGER.info('Computing Poisson surface for {} points'.format(self.npoints))
+        LOGGER.info(f'Computing Poisson surface for {self.npoints} points')
         mtimer = Timer()
         sfaces, sverts = poisson_reconstruction(self.points.tolist(),
                                                 self.pnormals.tolist(),
                                                 depth=exactness_level)
-        mtimer.end(False)
-        LOGGER.info('Poisson surface computed! took {} created {} faces and {} vertices.'
-                    .format(mtimer, len(sfaces), len(sverts)))
+        mtimer.end()
+        LOGGER.info(f'Poisson surface computed! took {mtimer}. '
+                    f'created {len(sfaces)} faces and {len(sverts)} vertices.')
 
         # represent the poisson surface as a triangulation
         self.surf_poisson = TriMesh(sverts, faces=sfaces, label='surf_poisson')
@@ -168,14 +177,14 @@ class Membrane(object):
         #self.surf_poisson.write_vtp('_temp3.vtp', {})#params)
         #self.surf_poisson.remesh()
         #self.surf_poisson.write_vtp('_temp3_remeshed.vtp', {})#params)
-        self.surf_poisson.display()
+        LOGGER.info(self.surf_poisson)
 
     # --------------------------------------------------------------------------
     def compute_membrane_surface(self):
-        '''
+        """
             Compute the membrane surfaces that pass
                 through the given set of points
-        '''
+        """
 
         # 1. parameterize the membrane surface
         self.surf_poisson.parameterize()
@@ -191,7 +200,7 @@ class Membrane(object):
         if self.periodic:
 
             # use the bbox of parameterized vertices (= bbox of poisson surface)
-                # that is the absolute maximum
+            # that is the absolute maximum
             bb0 = self.surf_poisson.pverts.min(axis=0)
             bb1 = self.surf_poisson.pverts.max(axis=0)
             self.memb_planar.set_bbox(bb0, bb1)
@@ -239,26 +248,24 @@ class Membrane(object):
         nlabels = len(labels)
 
         if type < 1 or type > 3:
-            raise InvalidArgument('Invalid density type, {}. Should be 1 (geodesic), 2 (2D) or 3 (3D)'.format(type))
+            raise InvalidArgument(f'Invalid density type, {type}. Should be 1 (geodesic), 2 (2D) or 3 (3D)')
 
         # if labels are not available
-        if nlabels == 0 and self.labels.shape == (0,0):
+        if nlabels == 0 and self.labels.shape is None:
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         # estimate density of all points
         if nlabels == 0:
             self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, np.empty([0]))
-            #print '---------->',  self.properties[name].min(),self.properties[name].max()
             return
 
         # estimate density of a subset of points
         # still compute on all vertices
-        if self.labels.shape == (0,0):
+        if self.labels.shape is None:
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         lidxs = np.where(np.in1d(self.labels, labels))[0]
         self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, lidxs)
-        #print ('----------> {} : {} {}'.format(name, self.properties[name].min(),self.properties[name].max()))
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -309,48 +316,24 @@ class Membrane(object):
     # --------------------------------------------------------------------------
     def write_all(self, outprefix, params={}):
 
-        from .utils import write2vtkpolydata
+        if True:
+            pparams = {'normals': self.pnormals}
+            if self.labels.shape != (0,0):
+                pparams['labels'] = self.labels
 
-        pparams = {'normals': self.pnormals}
-        if self.labels.shape != (0,0):
-            pparams['labels'] = self.labels
+            # create a temporary mesh just to output the points
+            TriMesh(self.points).write_vtp(outprefix+'_points.vtp', pparams)
 
-        write2vtkpolydata(outprefix+'_points.vtp', self.points, pparams)
-        self.surf_poisson.write_vtp(outprefix+'_surface_poisson.vtp')
+        if True:
+            self.surf_poisson.write_vtp(outprefix + '_surface_poisson.vtp')
 
-        if self.labels.shape != (0,0):
-            params['labels'] = self.labels
+        if True:
+            for key in list(self.properties.keys()):
+                params[key] = self.properties[key]
 
-        for key in list(self.properties.keys()):
-            params[key] = self.properties[key]
-
-        #self.memb_exact.faces = self.memb_smooth.faces
-        self.memb_planar.write_vtp(outprefix+'_planar.vtp', params)
-        self.memb_exact.write_vtp(outprefix+'_membrane_exact.vtp', params)
-        self.memb_smooth.write_vtp(outprefix+'_membrane_smooth.vtp', params)
-
-        #self.memb_planar.tmesh.write_binary(outprefix+'_mesh2.bin')
-        #self.memb_exact.tmesh.write_binary(outprefix+'_mesh3.bin')
-        #self.memb_smooth.tmesh.write_binary(outprefix+'_mesh32.bin')
-
-    def write(self, outprefix, params={}):
-
-        from .utils import write2vtkpolydata
-
-        pparams = {'normals': self.pnormals}
-        if self.labels.shape != (0,0):
-            pparams['labels'] = self.labels
-
-        write2vtkpolydata(outprefix+'_points.vtp', self.points, pparams)
-
-        if self.labels.shape != (0,0):
-            params['labels'] = self.labels
-
-        for key in list(self.properties.keys()):
-            params[key] = self.properties[key]
-
-        self.memb_smooth.write_vtp(outprefix+'_membrane.vtp', params)
-        #self.memb_smooth.write_off("test.off")
+            self.memb_planar.write_vtp(outprefix+'_planar.vtp', params)
+            self.memb_exact.write_vtp(outprefix+'_membrane_exact.vtp', params)
+            self.memb_smooth.write_vtp(outprefix+'_membrane_smooth.vtp', params)
 
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------

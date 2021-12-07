@@ -15,54 +15,18 @@ For details, see https://github.com/LLNL/MemSurfer.
 
 import numpy as np
 import timeit
-
-# ------------------------------------------------------------------------------
-# timing utils
-# ------------------------------------------------------------------------------
-class Timer(object):
-
-    def __init__(self):
-        self.start()
-
-    def start(self):
-        self.stime = timeit.default_timer()
-
-    def end(self, print_time=False):
-
-        self.etime = timeit.default_timer()
-        if print_time:
-            print(self)
-
-    def __str__(self):
-
-        tseconds = self.etime - self.stime
-        if tseconds < np.power(10.,-6.):
-            return "%.3f micro-sec." % (tseconds*np.power(10,6))
-
-        elif tseconds < np.power(10.,-3.):
-            return "%.3f milli-sec." % (tseconds*np.power(10.,3.))
-
-        elif tseconds < 60.0:
-            return "%.3f sec." % (tseconds)
-
-        else:
-            m = int(tseconds/ 60.0)
-            return "%d min. %.3f sec." % (m, (tseconds - 60*m))
-
-    def __repr__(self):
-        return self.__str__()
+import inspect
+import logging
 
 # ------------------------------------------------------------------------------
 # logging utils
 # ------------------------------------------------------------------------------
-import inspect, logging
 LOGGER = logging.getLogger(__name__)
 
 # Configuration globals
-#LFORMAT = '%(asctime)s %(name)s:%(funcName)s:%(lineno)s - %(levelname)s - %(message)s'
-#LFORMAT = '%(name)s:%(funcName)s: - %(message)s'
 LFORMAT = '%(asctime)s [%(levelname)s] %(name)s:%(funcName)s - %(message)s'
 ACCEPTED_INPUT = set(["yes", "y"])
+
 
 # Create an interface to initialize a logger
 def create_logger(loglevel, logstdout, logfile, logpath, logfname):
@@ -119,182 +83,43 @@ def create_logger(loglevel, logstdout, logfile, logpath, logfname):
     LOGGER.critical('Enabled')
     return LOGGER
 
-# ------------------------------------------------------------------------------
-# i/o
-# ------------------------------------------------------------------------------
-def read_off(filename):
-
-    verts = []
-    faces = []
-    with open(filename,'r') as file:
-
-        s = file.readline()
-        s = file.readline().split()
-
-        nv = int(s[0])
-        nf = int(s[1])
-
-        s = file.readlines()
-        s = [l.split() for l in s]
-
-        verts = [[float(l[0]), float(l[1]), float(l[2])] for l in s[:nv]]
-        faces = [[int(l[1]), int(l[2]), int(l[3])] for l in s[nv:nv+nf]]
-        file.close()
-
-    return verts, faces
-
-def write_off(filename, verts, faces):
-
-    nv = len(verts)
-    nf = len(faces)
-
-    with open(filename,'wb') as file:
-        file.write('OFF\n')
-        file.write("{} {} {}\n".format(nv, nf, 0))
-        for p in verts:
-            if(len(p) == 2):
-                file.write("{0:0.6f} {1:0.6f} 0.0\n".format(p[0],p[1]))
-            else:
-                file.write("{0:0.6f} {1:0.6f} {2:0.6f}\n".format(p[0],p[1], p[2]))
-
-        for f in faces:
-            number = len(f)
-            row = "{0}".format(number)
-            for elem in f:
-                row += " {} ".format(int(elem))
-            row += "\n"
-            file.write(row)
-
-def read_ply(filename):
-    pass
-
-# write a surface as a ply file
-def write_ply(filename, verts, faces):
-
-    nv = len(verts)
-    nf = len(faces)
-
-    header = '''ply
-format ascii 1.0
-element vertex {0}
-property float x
-property float y
-property float z
-element face {1}
-property list uchar int vertex_indices
-end_header\n'''.format(nv, nf)
-
-    with open(filename,'wb') as file:
-        file.writelines(header)
-        for p in verts:
-            if(len(p) == 2):
-                file.write("{0:0.6f} {1:0.6f} 0.0\n".format(p[0],p[1]))
-            else:
-                file.write("{0:0.6f} {1:0.6f} {2:0.6f}\n".format(p[0],p[1], p[2]))
-
-        for f in faces:
-            number = len(f)
-            row = "{0}".format(number)
-            for elem in f:
-                row += " {0} ".format(elem)
-            row += "\n"
-            file.write(row)
 
 # ------------------------------------------------------------------------------
-# vtk i/o
+# timing utils
 # ------------------------------------------------------------------------------
-def write2vtkpolydata(filename, verts, properties):
+class Timer(object):
 
-    import vtk
-    from vtk.util import numpy_support
+    def __init__(self):
+        self.stime = None
+        self.etime = None
+        self.start()
 
-    LOGGER.info('Creating vtkdata and writing to [{}]'.format(filename))
+    def start(self):
+        self.stime = timeit.default_timer()
 
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName(filename)
+    def end(self, print_time=False):
+        self.etime = timeit.default_timer()
+        if print_time:
+            print(self)
 
-    polydata = vtk.vtkPolyData()
+    def __str__(self):
 
-    points = vtk.vtkPoints()
-    cells = vtk.vtkCellArray()
+        tseconds = self.etime - self.stime
+        if tseconds < np.power(10.,-6.):
+            return "%.3f micro-sec." % (tseconds*np.power(10,6))
 
-    if 'bbox' in list(properties.keys()):
-        box = 0.5*properties['bbox']
-        trim_box = True
-    else:
-        trim_box = False
+        elif tseconds < np.power(10.,-3.):
+            return "%.3f milli-sec." % (tseconds*np.power(10.,3.))
 
-    # --------------------------------------------------------------------------
-    for v in verts:
-        if len(v) == 3:     points.InsertNextPoint(v[0], v[1], v[2])
-        else:               points.InsertNextPoint(v[0], v[1], 0)
-
-    polydata.SetPoints(points)
-
-    # --------------------------------------------------------------------------
-    if 'faces' in list(properties.keys()):
-        faces = properties['faces']
-        #fid = 0
-        for f in faces:
-            cell = vtk.vtkTriangle()
-            is_periodic = False
-
-            for i in range(3):
-                cell.GetPointIds().SetId(i, f[i])
-
-                if trim_box:
-                    p = polydata.GetPoint(f[i])
-                    q = polydata.GetPoint(f[(i+1)%3])
-
-                    if abs(p[0]-q[0]) > box[0] or abs(p[1]-q[1]) > box[1]:
-                        #print 'face', fid, f, 'has periodic edge', p, q
-                        is_periodic = True
-
-            #fid+=1
-            if not is_periodic:
-                cells.InsertNextCell(cell)
-            polydata.SetPolys(cells)
-
-    else:
-        for i in range(len(verts)):
-            cell = vtk.vtkVertex()
-            cell.GetPointIds().SetId(0, i)
-            cells.InsertNextCell(cell)
-        polydata.SetVerts(cells)
-
-    # --------------------------------------------------------------------------
-    for key in list(properties.keys()):
-        if key == 'faces' or key == 'bbox':
-            continue
-
-        data = properties[key]
-        if not isinstance(data, np.ndarray):
-            data = np.array([data])
-
-        if key == 'labels':
-            nvals = data.shape[0]
-            VTK_data = vtk.vtkStringArray()
-            VTK_data.SetNumberOfValues(nvals)
-            for i in range(nvals):
-                VTK_data.SetValue(i, str(data[i]))
+        elif tseconds < 60.0:
+            return "%.3f sec." % (tseconds)
 
         else:
-            VTK_data = numpy_support.numpy_to_vtk(num_array=data)
+            m = int(tseconds/ 60.0)
+            return "%d min. %.3f sec." % (m, (tseconds - 60*m))
 
-        VTK_data.SetName(key)
+    def __repr__(self):
+        return self.__str__()
 
-        if data.shape[0] == 1:
-            polydata.GetFieldData().AddArray(VTK_data)
-
-        elif data.shape[0] == points.GetNumberOfPoints():
-            polydata.GetPointData().AddArray(VTK_data)
-
-        elif data.shape[0] == cells.GetNumberOfCells():
-            polydata.GetCellData().AddArray(VTK_data)
-
-    # --------------------------------------------------------------------------
-    writer.SetInputData(polydata)
-    writer.Write()
-    LOGGER.info('File [{}] successfully written.'.format(filename))
-
+# ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------

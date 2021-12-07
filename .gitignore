@@ -1,10 +1,13 @@
 *.DS_Store
+*.idea
 
 build*
 dist
 external
 
+pypoisson.so
 memsurfer.egg-info
+memsurfer/_memsurfer_cmod.so
 memsurfer/memsurfer_cmod.py
 memsurfer/memsurfer_wrap.cpp
 

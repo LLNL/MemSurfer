@@ -1,4 +1,4 @@
-'''
+"""
 Copyright (c) 2019, Lawrence Livermore National Security, LLC.
 Produced at the Lawrence Livermore National Laboratory.
 Written by Harsh Bhatia (hbhatia@llnl.gov) and Peer-Timo Bremer (bhatia4@llnl.gov)
@@ -7,11 +7,12 @@ LLNL-CODE-763493. All rights reserved.
 This file is part of MemSurfer, Version 1.0.
 Released under GNU General Public License 3.0.
 For details, see https://github.com/LLNL/MemSurfer.
-'''
+"""
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-import os, sys
+import os
+import sys
 import numpy as np
 import argparse
 import logging
@@ -33,7 +34,7 @@ from lipidType import *
 # ------------------------------------------------------------------------------
 if __name__ == '__main__':
 
-    print ('using memsurfer from ({})'.format(memsurfer.__file__))
+    print(f'using memsurfer from ({os.path.basename(memsurfer.__file__)})')
 
     # --------------------------------------------------------------------------
     # Path to input data.
@@ -63,14 +64,14 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Use MDAnalysis to read the data
     fargs = ['-f', args['traj'][0], '-s', args['topo'][0]]
-    LOGGER.info('arguments = {}'.format(fargs))
+    LOGGER.info(f'arguments = {fargs}')
 
     syst = mdreader.MDreader(fargs)
     syst.add_argument('-sframe', metavar='SELFRAME', type=int, dest='selframe', default=-1, help='int \tframe to save')
     syst.do_parse()
 
-    LOGGER.info('Number of frames in sim {}'.format(len(syst)))
-    LOGGER.info('System dimensions: {}'.format(syst.dimensions[0:3]))
+    LOGGER.info(f'Number of frames: {len(syst)}')
+    LOGGER.info(f'System dimensions: {syst.dimensions[0:3]}')
 
     # In this example, we only look at a single frame (the last one)
     selFrame = [len(syst)-1]
@@ -93,8 +94,8 @@ if __name__ == '__main__':
     resnames = np.unique(syst.atoms.resnames)
 
     # Make a lipid type dictionary
-    LOGGER.warning('Following resnames either not lipids or not supported {}'
-                    .format(resnames[np.logical_not(np.in1d(resnames, lipidTypeNames))]))
+    mresnames = resnames[np.logical_not(np.in1d(resnames, lipidTypeNames))]
+    LOGGER.warning(f'Following resnames either not lipids or not supported {mresnames}')
 
     lipidTypeDic = {}
     for i in np.where(np.in1d(lipidTypeNames, resnames))[0]:
@@ -105,8 +106,6 @@ if __name__ == '__main__':
 
     for i in list(lipidTypeDic.values()):
         defFlipFlopHeadgroups += i.getNoneLeafletSelection(syst)
-
-    #LOGGER.info('FlipFlopHeadgroups = {}'.format(defFlipFlopHeadgroups))
 
     # --------------------------------------------------------------------------
     # Define top/bottom leaflets
@@ -124,7 +123,7 @@ if __name__ == '__main__':
     grps = lfls.groups()
 
     if len(grps) == 2:
-        LOGGER.info('Found {} leaflet groups'.format(len(grps)))
+        LOGGER.info(f'Found {len(grps)} leaflet groups')
 
     # check if they're even
     top_head = grps[0]
@@ -132,9 +131,10 @@ if __name__ == '__main__':
 
     rt = float(len(top_head))/len(bot_head)
     if rt > 1.3 or rt < 0.77:
-        raise ValueError('Found uneven leaflets. top = {}, bot = {}'.format(len(top_head), len(bot_head)))
+        raise ValueError(f'Found uneven leaflets. '
+                         f'top = {len(top_head)}, bot = {len(bot_head)}')
 
-    LOGGER.info('Found leaflets of size {}, {}'.format(len(top_head), len(bot_head)))
+    LOGGER.info(f'Found leaflets of size {len(top_head)} and {len(bot_head)}')
 
     # --------------------------------------------------------------------------
     # Compute membranes for all frames
@@ -143,25 +143,26 @@ if __name__ == '__main__':
         print('\n')
         # Select frame 0 to len(syst)
         ts = syst.trajectory[i]
-        LOGGER.info('Frame: %5d, Time: %8.3f ps' % (ts.frame, syst.trajectory.time))
+        LOGGER.info(f'Frame: {ts.frame:5d}, Time: {syst.trajectory.time:8.3f} ps')
 
         # Get all lipids in top/bot leaflets (including flip-flop lipids - therefore has to be done for each frame)
         tp = top_head + defFlipFlopHeadgroups.select_atoms('around 12 global group topsel', topsel=top_head)
         bt = bot_head + defFlipFlopHeadgroups.select_atoms('around 12 global group botsel', botsel=bot_head)
 
         if len(tp.select_atoms('group bt', bt=bt)):
-            errmsg = 'Frame {}: {} common atoms between leaflets.'.format(syst.trajectory.frame, len(tp.select_atoms('group bt', bt=bt)))
+            errmsg = f'Frame {syst.trajectory.frame}: ' \
+                     f'{len(tp.select_atoms("group bt", bt=bt))} common atoms between leaflets'
             LOGGER.warning(errmsg)
             raise ValueError(errmsg)
 
-        ## Select one bead per lipid (could do this better by getting the residues - and selecting e.g. first of each
-        LOGGER.info('We have {} lipids in upper and {} in lower leaflets'.format(len(tp), len(bt)))
+        # Select one bead per lipid (could do this better by getting the residues - and selecting e.g. first of each
+        LOGGER.info(f'We have {len(tp)} lipids in upper and {len(bt)} in lower leaflets')
 
         # ----------------------------------------------------------------------
         # This is where we use MemSurfer
         # ----------------------------------------------------------------------
-        mt = memsurfer.Membrane.compute(tp.positions, tp.resnames, bbox, periodic)
-        mb = memsurfer.Membrane.compute(bt.positions, bt.resnames, bbox, periodic)
+        mt = memsurfer.Membrane.compute(tp.positions, tp.resnames.astype('U'), bbox, periodic)
+        mb = memsurfer.Membrane.compute(bt.positions, bt.resnames.astype('U'), bbox, periodic)
 
         # compute total density
         sigmas = [10,20,30,40]
@@ -174,11 +175,10 @@ if __name__ == '__main__':
 
         if True:
             # compute density of each type of lipid
-            mt.write_all(outprefix+'_f{}-top'.format(ts.frame),
-                    {'frame': ts.frame, 'time': syst.trajectory.time})
-
-            mb.write_all(outprefix+'_f{}-bot'.format(ts.frame),
-                    {'frame': ts.frame, 'time': syst.trajectory.time})
+            mt.write_all(f'{outprefix}_f{ts.frame}-top',
+                         {'frame': ts.frame, 'time': syst.trajectory.time})
+            mb.write_all(f'{outprefix}_f{ts.frame}-bot',
+                         {'frame': ts.frame, 'time': syst.trajectory.time})
 
         # --------------------------------------------------------------------------
         # --------------------------------------------------------------------------
