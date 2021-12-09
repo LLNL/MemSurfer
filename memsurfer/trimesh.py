@@ -73,6 +73,7 @@ class TriMesh(object):
         self.pareas = None          # point areas
         self.mean_curv = None       # mean curvature
         self.gaus_curv = None       # gaussian curvature
+        self.shells = None          # shell index
 
         self.pverts = None          # parameterized vertices
         self.pfaces = None          # periodic faces
@@ -226,6 +227,9 @@ class TriMesh(object):
 
         if 'gaus_curv' in props_to_include and self.gaus_curv is not None:
             _add_to_polydata('gaus_curv', self.gaus_curv)
+
+        if 'shell' in props_to_include and self.shells is not None:
+            _add_to_polydata('shell_idx', self.shells)
 
         for k, v in additional_props.items():
             _add_to_polydata(k, v)
@@ -460,6 +464,50 @@ class TriMesh(object):
         return d
 
     # --------------------------------------------------------------------------
+    def compute_shells(self, ref_pts):
+
+        assert isinstance(ref_pts, (list, np.ndarray))
+        assert len(ref_pts) > 0
+
+        # compute shell index with respect to the reference points!
+        LOGGER.info(f'{self.tag()} Computing shells witg respect to {len(ref_pts)} vertices')
+        mtimer = Timer()
+
+        nverts = self.vertices.shape[0]
+
+        # get neighborhood graph
+        ret_val = self.tmesh.need_neighbors()
+        ret_val = np.array(ret_val).astype(np.int)
+
+        # reformat the received data to create neighbor list
+        nnbrs = ret_val[:nverts]        # first n are the counts
+
+        nbrs = [[] for i in range(nverts)]
+        nidx = nverts
+        for vidx in range(nverts):
+            nbrs[vidx] = ret_val[nidx:nidx+nnbrs[vidx]]
+            nidx += nnbrs[vidx]
+
+        # now, populate the shells using a simple bfs on this graph
+        self.shells = -1 * np.ones(nverts)
+
+        # initialize the bfs with reference points as shell = 0
+        for p in ref_pts:
+            self.shells[p] = 0
+
+        vertices_to_process = list(ref_pts)
+        while len(vertices_to_process) > 0:
+            current_vertex = vertices_to_process.pop(0)
+            for nbr in nbrs[current_vertex]:
+                if self.shells[nbr] == -1:   # this vertex has not been visited yet!
+                    self.shells[nbr] = 1+self.shells[current_vertex]
+                    vertices_to_process.append(nbr)
+
+        assert self.shells.min() == 0, 'Failed to assign shell id for some vertices'
+        mtimer.end()
+        LOGGER.info(f'{self.tag()} Computed shells for {self.vertices.shape[0]} vertices! took {mtimer}')
+
+    # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
     def copy_triangulation(self, mesh):
 
@@ -486,7 +534,7 @@ class TriMesh(object):
     def write_vtp(self, filename, additional_props={}):
 
         # 4x properties are stored in the python object
-        props_to_include = ['pnormals', 'pareas', 'mean_curv', 'gaus_curv']
+        props_to_include = ['pnormals', 'pareas', 'mean_curv', 'gaus_curv', 'shell']
 
         polydata = self.as_vtkpolydata(props_to_include, additional_props)
 

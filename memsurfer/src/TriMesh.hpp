@@ -260,6 +260,8 @@ public:
     std::vector<TypeFunction> get_vertices() const {    return linearize<3,TypeFunction,TypeFunction>(this->mVertices, this->mDim);    }
     std::vector<TypeIndexI> get_faces() const {         return linearize<3,TypeIndex,TypeIndexI>(this->mFaces, 3);          }
 
+    std::vector<TypeIndexI> need_neighbors();
+
     //! -----------------------------------------------------------------------------------
     //! Set a field with a name
     bool set_field(std::string key, float *_, int n, int d) {
