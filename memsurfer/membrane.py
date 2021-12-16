@@ -308,7 +308,7 @@ class Membrane(object):
         m.compute_membrane_surface()
 
         # compute properties on the membrane
-        m.compute_properties('exact')
+        #m.compute_properties('exact')
         m.compute_properties('smooth')
         return m
 
@@ -316,10 +316,13 @@ class Membrane(object):
     # --------------------------------------------------------------------------
     def write_all(self, outprefix, params={}):
 
+        pparams = {'normals': self.pnormals}
+        if self.labels.shape != (0, 0):
+            pparams['labels'] = self.labels
+
         if True:
-            pparams = {'normals': self.pnormals}
-            if self.labels.shape != (0,0):
-                pparams['labels'] = self.labels
+            if self.memb_smooth.shells is not None:
+                pparams['shells'] = self.memb_smooth.shells
 
             # create a temporary mesh just to output the points
             TriMesh(self.points).write_vtp(outprefix+'_points.vtp', pparams)
@@ -330,6 +333,9 @@ class Membrane(object):
         if True:
             for key in list(self.properties.keys()):
                 params[key] = self.properties[key]
+
+            if 'labels' in pparams.keys():
+                params['labels'] = pparams['labels']
 
             self.memb_planar.write_vtp(outprefix+'_planar.vtp', params)
             self.memb_exact.write_vtp(outprefix+'_membrane_exact.vtp', params)

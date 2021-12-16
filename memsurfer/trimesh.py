@@ -228,7 +228,7 @@ class TriMesh(object):
         if 'gaus_curv' in props_to_include and self.gaus_curv is not None:
             _add_to_polydata('gaus_curv', self.gaus_curv)
 
-        if 'shell' in props_to_include and self.shells is not None:
+        if 'shells' in props_to_include and self.shells is not None:
             _add_to_polydata('shell_idx', self.shells)
 
         for k, v in additional_props.items():
@@ -470,7 +470,7 @@ class TriMesh(object):
         assert len(ref_pts) > 0
 
         # compute shell index with respect to the reference points!
-        LOGGER.info(f'{self.tag()} Computing shells witg respect to {len(ref_pts)} vertices')
+        LOGGER.info(f'{self.tag()} Computing shells with respect to {len(ref_pts)} vertices')
         mtimer = Timer()
 
         nverts = self.vertices.shape[0]
@@ -534,7 +534,7 @@ class TriMesh(object):
     def write_vtp(self, filename, additional_props={}):
 
         # 4x properties are stored in the python object
-        props_to_include = ['pnormals', 'pareas', 'mean_curv', 'gaus_curv', 'shell']
+        props_to_include = ['pnormals', 'pareas', 'mean_curv', 'gaus_curv', 'shells']
 
         polydata = self.as_vtkpolydata(props_to_include, additional_props)
 
