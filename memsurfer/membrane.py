@@ -80,7 +80,7 @@ class Membrane(object):
         self.bbox = self.bbox.astype(np.float32)
         self.pset = memsurfer_cmod.PointSet(self.points)
 
-        # different constructs we will comptue
+        # different constructs we will compute
         self.pnormals = None
         self.spoints = None
         self.ppoints = None
@@ -91,7 +91,7 @@ class Membrane(object):
         self.memb_exact = None
 
         # other properties
-        self.properties = {}
+        self.attributes = {}
 
     # --------------------------------------------------------------------------
     def fit_points_to_box_xy(self):
@@ -201,8 +201,7 @@ class Membrane(object):
 
             # use the bbox of parameterized vertices (= bbox of poisson surface)
             # that is the absolute maximum
-            bb0 = self.surf_poisson.pverts.min(axis=0)
-            bb1 = self.surf_poisson.pverts.max(axis=0)
+            bb0, bb1 = self.surf_poisson.parameterization_bbox()
             self.memb_planar.set_bbox(bb0, bb1)
 
             # bounding box of the points projected on the surface
@@ -216,7 +215,7 @@ class Membrane(object):
             self.memb_exact.set_bbox(bb0, bb1)
 
         # compute delaunay triangulation of the planar points
-        self.memb_planar.delaunay()
+        self.memb_planar.compute_delaunay()
         self.memb_smooth.copy_triangulation(self.memb_planar)
         self.memb_exact.copy_triangulation(self.memb_planar)
 
@@ -256,7 +255,7 @@ class Membrane(object):
 
         # estimate density of all points
         if nlabels == 0:
-            self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, np.empty([0]))
+            self.attributes[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, np.empty([0]))
             return
 
         # estimate density of a subset of points
@@ -265,7 +264,7 @@ class Membrane(object):
             raise ValueError('Cannot compute density of selected labels, because point labels are not available')
 
         lidxs = np.where(np.in1d(self.labels, labels))[0]
-        self.properties[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, lidxs)
+        self.attributes[name] = self.memb_smooth.compute_density(type, sigma, name, get_nlipdis, lidxs)
 
     # --------------------------------------------------------------------------
     @staticmethod
@@ -331,8 +330,8 @@ class Membrane(object):
             self.surf_poisson.write_vtp(outprefix + '_surface_poisson.vtp')
 
         if True:
-            for key in list(self.properties.keys()):
-                params[key] = self.properties[key]
+            for key in list(self.attributes.keys()):
+                params[key] = self.attributes[key]
 
             if 'labels' in pparams.keys():
                 params['labels'] = pparams['labels']
