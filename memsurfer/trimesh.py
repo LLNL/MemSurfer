@@ -29,7 +29,7 @@ class TriMesh(object):
        Class to create and manipulate triangular meshes (in 2D and 3D)
     """
 
-    KNOWN_ATTRIBUTES = ['pnormals', 'pareas', 'mean_curv', 'gaus_curv', 'shells']
+    KNOWN_ATTRIBUTES = ['pnormal', 'parea', 'mean_curv', 'gaus_curv', 'shell']
 
     # --------------------------------------------------------------------------
     # constructor
@@ -233,8 +233,9 @@ class TriMesh(object):
     # --------------------------------------------------------------------------
     def compute_normals(self):
 
-        if 'pnormals' in self.attributes:
-            return self.attributes['pnormals']
+        key = 'pnormal'
+        if key in self.attributes:
+            return self.attributes[key]
 
         LOGGER.info(f'{self.tag()} Computing vertex normals')
         mtimer = Timer()
@@ -243,17 +244,18 @@ class TriMesh(object):
         if len(rval) != 3*self.vertices.shape[0]:
             raise ValueError('Incorrect vertex normals!')
 
-        self.attributes['pnormals'] = np.asarray(rval).reshape(-1,3).astype(np.float32)
+        self.attributes[key] = np.asarray(rval).reshape(-1,3).astype(np.float32)
 
         mtimer.end()
-        LOGGER.info(f"{self.tag()} Computed {self.attributes['pnormals'].shape[0]} normals! took {mtimer}")
-        return self.attributes['pnormals']
+        LOGGER.info(f"{self.tag()} Computed {self.attributes[key].shape[0]} normals! took {mtimer}")
+        return self.attributes[key]
 
     # --------------------------------------------------------------------------
     def compute_pointareas(self):
 
-        if 'pareas' in self.attributes:
-            return self.attributes['pareas']
+        key = 'parea'
+        if key in self.attributes:
+            return self.attributes[key]
 
         LOGGER.info(f'{self.tag()} Computing vertex areas')
         mtimer = Timer()
@@ -262,17 +264,18 @@ class TriMesh(object):
         if len(rval) != self.vertices.shape[0]:
             raise ValueError('Incorrect vertex areas!')
 
-        self.attributes['pareas'] = np.array(rval).astype(np.float32)
+        self.attributes[key] = np.array(rval).astype(np.float32)
 
         mtimer.end()
-        LOGGER.info(f"{self.tag()} Computed {self.attributes['pareas'].shape[0]} areas! took {mtimer}")
-        return self.attributes['pareas']
+        LOGGER.info(f"{self.tag()} Computed {self.attributes[key].shape[0]} areas! took {mtimer}")
+        return self.attributes[key]
 
     # --------------------------------------------------------------------------
     def compute_curvatures(self):
 
-        if 'mean_curv' in self.attributes and 'gaus_curv' in self.attributes:
-            return self.attributes['mean_curv'], self.attributes['gaus_curv']
+        keys = ['mean_curv', 'gaus_curv']
+        if keys[0] in self.attributes and keys[1] in self.attributes:
+            return self.attributes[keys[0]], self.attributes[keys[1]]
 
         # convert into vtk polydata
         polydata = self.as_vtkpolydata(include_attributes=[])
@@ -295,12 +298,12 @@ class TriMesh(object):
         g = numpy_support.vtk_to_numpy(gc.GetOutput().GetPointData().GetArray('Gauss_Curvature'))
 
         nverts = self.vertices.shape[0]
-        self.attributes['mean_curv'] = m[:nverts]
-        self.attributes['gaus_curv'] = g[:nverts]
+        self.attributes[keys[0]] = m[:nverts]
+        self.attributes[keys[1]] = g[:nverts]
 
         mtimer.end()
         LOGGER.info(f'{self.tag()} Computed {nverts} x2 curvatures! took {mtimer}')
-        return self.attributes['mean_curv'], self.attributes['gaus_curv']
+        return self.attributes[keys[0]], self.attributes[keys[1]]
 
     # --------------------------------------------------------------------------
     def compute_distance_to_surface(self, other):
@@ -350,6 +353,10 @@ class TriMesh(object):
     # --------------------------------------------------------------------------
     def compute_shells(self, ref_pts):
 
+        key = 'shell'
+        if key in self.attributes:
+            return self.attributes[key]
+
         assert isinstance(ref_pts, (list, np.ndarray))
         assert len(ref_pts) > 0
 
@@ -388,10 +395,10 @@ class TriMesh(object):
                     vertices_to_process.append(nbr)
 
         assert shells.min() == 0, 'Failed to assign shell id for some vertices'
-        self.attributes['shells'] = shells.astype(int)
+        self.attributes[key] = shells.astype(int)
         mtimer.end()
         LOGGER.info(f'{self.tag()} Computed shells for {self.vertices.shape[0]} vertices! took {mtimer}')
-        return self.attributes['shells']
+        return self.attributes[key]
 
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
@@ -491,7 +498,7 @@ class TriMesh(object):
 
             # everything must be a numpy array
             if not isinstance(_data, np.ndarray):
-                _data = np.array([_data])
+                _data = np.array(_data)
 
             # duplicate if needed, if this is point data
             if include_periodic and _data.shape[0] == self.vertices.shape[0]:
@@ -519,7 +526,9 @@ class TriMesh(object):
                 polydata.GetCellData().AddArray(_vtkdata)
 
             else:
-                LOGGER.warning(f'Could not add {_name} with size {_data.shape}')
+                LOGGER.warning(f'Could not add "{_name}" with size {_data.shape}. '
+                               f'(nverts = {points.GetNumberOfPoints()}, '
+                               f'faces = {cells.GetNumberOfCells()})')
 
         # ----------------------------------------------------------------------
         for att in include_attributes:
@@ -571,8 +580,6 @@ class TriMesh(object):
 
         # ----------------------------------------------------------------------
         _add_to_dataframe('pos', self.vertices)
-        df.index.name = 'vertex_index'
-
         for att in include_attributes:
             if att in self.attributes.keys():
                 _add_to_dataframe(att, self.attributes[att])

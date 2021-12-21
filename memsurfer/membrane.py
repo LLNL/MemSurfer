@@ -305,10 +305,6 @@ class Membrane(object):
         m.compute_pnormals(knbrs)
         m.compute_approx_surface()
         m.compute_membrane_surface()
-
-        # compute properties on the membrane
-        #m.compute_properties('exact')
-        m.compute_properties('smooth')
         return m
 
     # --------------------------------------------------------------------------
