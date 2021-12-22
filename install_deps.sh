@@ -50,7 +50,7 @@ if [ -z "${CXX_COMPILER}" ] ; then
 fi
 export CC=${CC_COMPILER}
 export CXX=${CXX_COMPILER}
-export PYTHON=`which python`
+export PYTHON=`which python3`
 
 
 command -v "${CC}" >/dev/null 2>&1 || { echo >&2 "Cannot find C compiler '${CC}'. Aborting."; exit 1;  }
