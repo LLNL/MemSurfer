@@ -1,4 +1,4 @@
-'''
+"""
 Copyright (c) 2019, Lawrence Livermore National Security, LLC.
 Produced at the Lawrence Livermore National Laboratory.
 Written by Harsh Bhatia (hbhatia@llnl.gov) and Peer-Timo Bremer (bremer5@llnl.gov)
@@ -7,12 +7,13 @@ LLNL-CODE-763493. All rights reserved.
 This file is part of MemSurfer, Version 1.0.
 Released under GNU General Public License 3.0.
 For details, see https://github.com/LLNL/MemSurfer.
-'''
+"""
 
 # ------------------------------------------------------------------------------
 # This file provides some simple utilities used by MemSurfer
 # ------------------------------------------------------------------------------
 
+import os
 import numpy as np
 import timeit
 import inspect
@@ -30,13 +31,13 @@ ACCEPTED_INPUT = set(["yes", "y"])
 
 # Create an interface to initialize a logger
 def create_logger(loglevel, logstdout, logfile, logpath, logfname):
-    '''
+    """
         logstdout -- enable logging to stdout!
         logfile   -- enable logging to file!
         logfname  -- logfile name!
         logpath   -- logpath name!
         loglevel  -- log level!
-    '''
+    """
     # log level!
     assert(loglevel >= 1 and loglevel <= 5)
     if loglevel == 1:       loglevel = logging.DEBUG
@@ -71,7 +72,7 @@ def create_logger(loglevel, logstdout, logfile, logpath, logfname):
         fh.setLevel(loglevel)
         fh.setFormatter(formatter)
         ROOTLOGGER.addHandler(fh)
-        LOGGER.debug('file {} Enabled'.format(logfname))
+        LOGGER.debug(f'file {logfname} Enabled')
 
     return LOGGER
 

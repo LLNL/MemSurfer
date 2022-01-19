@@ -316,8 +316,8 @@ class Membrane(object):
             pparams['labels'] = self.labels
 
         if True:
-            if self.memb_smooth.shells is not None:
-                pparams['shells'] = self.memb_smooth.shells
+            if 'shells' in self.memb_smooth.attributes: #self.memb_smooth.shells is not None:
+                pparams['shells'] = self.memb_smooth.attributes['shells']
 
             # create a temporary mesh just to output the points
             TriMesh(self.points).write_vtp(outprefix+'_points.vtp', pparams)

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Copyright (c) 2019, Lawrence Livermore National Security, LLC.
 Produced at the Lawrence Livermore National Laboratory.
@@ -47,7 +48,7 @@ def read_off(filename):
 # ------------------------------------------------------------------------------
 if __name__ == '__main__':
 
-    print(f'using memsurfer from ({os.path.basename(memsurfer.__file__)})')
+    print(f'using memsurfer from ({os.path.dirname(memsurfer.__file__)})')
 
     ddir = './data'
     filename = os.path.join(ddir, 'noisy.off')

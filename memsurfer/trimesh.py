@@ -427,7 +427,7 @@ class TriMesh(object):
                        include_attributes=KNOWN_ATTRIBUTES,
                        additional_attributes={}):
 
-        LOGGER.info(f'{self.tag()} Converting to vtk '
+        LOGGER.info(f'{self.tag()} Converting to vtk polydata '
                     f'(include={include_attributes}, '
                     f'additional={list(additional_attributes.keys())})')
 
@@ -497,45 +497,52 @@ class TriMesh(object):
         def _add_to_polydata(_name, _data):
 
             # everything must be a numpy array
-            if not isinstance(_data, np.ndarray):
+            if isinstance(_data, (int, float, str)):
+                _data = np.array([_data])
+
+            elif not isinstance(_data, np.ndarray):
                 _data = np.array(_data)
 
-            # duplicate if needed, if this is point data
-            if include_periodic and _data.shape[0] == self.vertices.shape[0]:
-                _data = np.concatenate((_data, _data[self._duplicated_vidxs]), axis=0)
+            try:
+                # duplicate if needed, if this is point data
+                if include_periodic and _data.shape[0] == self.vertices.shape[0]:
+                    _data = np.concatenate((_data, _data[self._duplicated_vidxs]), axis=0)
 
-            if _data.dtype.kind not in ['U', 'S']:
-                _vtkdata = numpy_support.numpy_to_vtk(num_array=_data)
+                if _data.dtype.kind not in ['U', 'S']:
+                    _vtkdata = numpy_support.numpy_to_vtk(num_array=_data)
 
-            else:
-                _vtkdata = vtk.vtkStringArray()
-                _vtkdata.SetNumberOfValues(_data.shape[0])
-                for i, v in enumerate(_data):
-                    _vtkdata.SetValue(i, str(v))
+                else:
+                    _vtkdata = vtk.vtkStringArray()
+                    _vtkdata.SetNumberOfValues(_data.shape[0])
+                    for i, v in enumerate(_data):
+                        _vtkdata.SetValue(i, str(v))
 
-            _vtkdata.SetName(_name)
+                _vtkdata.SetName(_name)
 
-            # now, where does this need to go?
-            if _data.shape[0] == 1:
-                polydata.GetFieldData().AddArray(_vtkdata)
+                # now, where does this need to go?
+                if _data.shape[0] == 1:
+                    polydata.GetFieldData().AddArray(_vtkdata)
 
-            elif _data.shape[0] == points.GetNumberOfPoints():
-                polydata.GetPointData().AddArray(_vtkdata)
+                elif _data.shape[0] == points.GetNumberOfPoints():
+                    polydata.GetPointData().AddArray(_vtkdata)
 
-            elif _data.shape[0] == cells.GetNumberOfCells():
-                polydata.GetCellData().AddArray(_vtkdata)
+                elif _data.shape[0] == cells.GetNumberOfCells():
+                    polydata.GetCellData().AddArray(_vtkdata)
 
-            else:
+                else:
+                    raise Exception('Failed to match size of data')
+
+            except Exception as e:
                 LOGGER.warning(f'Could not add "{_name}" with size {_data.shape}. '
                                f'(nverts = {points.GetNumberOfPoints()}, '
-                               f'faces = {cells.GetNumberOfCells()})')
+                               f'faces = {cells.GetNumberOfCells()}). Error = {e}')
 
         # ----------------------------------------------------------------------
         for att in include_attributes:
             if att in self.attributes.keys():
                 _add_to_polydata(att, self.attributes[att])
             else:
-                LOGGER.warning(f'Requested attribute {att} is not computed')
+                LOGGER.warning(f'Requested attribute "{att}" is not computed')
 
         for k, v in additional_attributes.items():
             _add_to_polydata(k, v)
@@ -555,7 +562,7 @@ class TriMesh(object):
                     f'additional={list(additional_attributes.keys())})')
 
         # this function does not list duplicate vertices
-        # vtk does!
+        # as_vtkpolydata does!
         # include_periodic = False
         df = pd.DataFrame()
 
@@ -576,7 +583,7 @@ class TriMesh(object):
                     df[f'{_name}_{dims[d]}'] = _data[:, d]
 
             else:
-                LOGGER.warning(f'Could not add {_name} with size {_data.shape}')
+                LOGGER.warning(f'Could not add "{_name}" with size {_data.shape}')
 
         # ----------------------------------------------------------------------
         _add_to_dataframe('pos', self.vertices)
@@ -584,7 +591,7 @@ class TriMesh(object):
             if att in self.attributes.keys():
                 _add_to_dataframe(att, self.attributes[att])
             else:
-                LOGGER.warning(f'Requested attribute {att} is not computed')
+                LOGGER.warning(f'Requested attribute "{att}" is not computed')
 
         for k, v in additional_attributes.items():
             _add_to_dataframe(k, v)
