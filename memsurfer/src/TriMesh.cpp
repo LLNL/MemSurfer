@@ -426,6 +426,7 @@ bool TriMesh::wrap_vertices(uint8_t dim) {
     const Vertex boxw = this->mBox1 - this->mBox0;
 
     const size_t nverts = mVertices.size();
+    std::cout << " wrapping " << nverts << " vertices!\n";
     for(size_t i=0; i<nverts; i++) {
     for(uint8_t d=0; d<dim; d++) {
         TypeFunction &x = mVertices[i][d];
@@ -461,24 +462,22 @@ void TriMesh::trim_periodicDelaunay(bool verbose) {
 
     for(size_t i = 0; i < ndfaces; i++) {
 
-        const std::vector<periodicVertex> &dface = this->mDelaunayFaces[i];
+        const std::vector<PeriodicVertex> &dface = this->mDelaunayFaces[i];
 
         Face face, tface;
         uint8_t num_orig_verts = 0;
 
         for(uint8_t d = 0; d < 3; d++) {
 
-            const periodicVertex &pvertex = dface[d];
+            const PeriodicVertex &pvertex = dface[d];
 
-            const TypeIndex orig_vid = std::get<0>(pvertex);
-            const int offx = std::get<1>(pvertex);
-            const int offy = std::get<2>(pvertex);
+            const TypeIndex orig_vid = pvertex.origVidx;
 
             face[d] = orig_vid;
             tface[d] = orig_vid;
 
             // is an original vertex
-            if (offx == 0 && offy == 0) {
+            if (pvertex.is_original()) {
                 num_orig_verts++;
                 continue;
             }
@@ -491,6 +490,9 @@ void TriMesh::trim_periodicDelaunay(bool verbose) {
                 ndupid = noverts + std::distance(mDuplicateVertex_periodic.begin(), iter);
             }
             else {
+                const int offx = pvertex.offsetx;
+                const int offy = pvertex.offsety;
+
                 // otherwise, let's duplicate
                 Vertex dv (mVertices[orig_vid]);
                 dv[0] += (offx == 0) ? 0.0 : float(offx) *boxw[0];
