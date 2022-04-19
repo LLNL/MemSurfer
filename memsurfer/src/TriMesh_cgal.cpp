@@ -13,7 +13,7 @@ For details, see https://github.com/LLNL/MemSurfer.
 /// ----------------------------------------------------------------------------
 
 #include <map>
-#include<string>
+#include <string>
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
@@ -66,26 +66,31 @@ TriMesh::TriMesh(const Polyhedron &P) {
 
 #ifdef CGAL_AVAILABLE
 #include <CGAL/spatial_sort.h>
+#include <CGAL/Spatial_sort_traits_adapter_2.h>
 #include <CGAL/Spatial_sort_traits_adapter_3.h>
 #endif
 
-void TriMesh::sort_vertices(std::vector<Point_with_idx> &svertices) const {
+// create a spatially sorted list of points
+std::vector<Point_with_idx>
+TriMesh::sort_vertices() const {
+
+    std::vector<Point_with_idx> svertices;
 
 #ifndef CGAL_AVAILABLE
     std::cerr << " ERROR: " << this->tag() <<"::sort_vertices - CGAL not available! cannot sort vertices!\n";s
 #else
-    typedef CGAL::Spatial_sort_traits_adapter_3<Kernel, CGAL::First_of_pair_property_map<Point_with_idx>> Sort_traits;
+    typedef CGAL::Spatial_sort_traits_adapter_2<Kernel, CGAL::First_of_pair_property_map<Point_with_idx>> Sort_traits;
 
-    // create a spatially sorted list of points
-    svertices.clear();
-    svertices.resize(mVertices.size());
-    for(size_t i = 0; i < mVertices.size(); i++) {
-        svertices[i] = std::make_pair(Point3(mVertices[i][0], mVertices[i][1], mVertices[i][2]), i);
+    svertices.reserve(mVertices.size());
+    size_t i = 0;
+    for(auto viter = mVertices.begin(); viter != mVertices.end(); ++i, ++viter) {
+        svertices.emplace_back(std::make_pair(Point2((*viter)[0], (*viter)[1]), i));
     }
 
     Sort_traits traits;
     CGAL::spatial_sort(svertices.begin(), svertices.end(), traits);
 #endif
+    return svertices;
 }
 
 //! -----------------------------------------------------------------------------
@@ -133,17 +138,12 @@ std::vector<TypeIndexI> TriMesh::delaunay(bool verbose) {
 
     //CGAL::Random::Random(0);
 
-    // sort the vertices
-    std::vector<Point_with_idx> cgalVertices;
-    this->sort_vertices(cgalVertices);
+    // sort spatially
+    std::vector<Point_with_idx> cgalVertices = this->sort_vertices();
 
     // compute delaunay
     Delaunay dt;
-    for(size_t i = 0; i < cgalVertices.size(); i++) {
-        Kernel::Point_3 &p = cgalVertices[i].first;     // although a 3D point, the data inside is 2D!
-        Delaunay::Vertex_handle vh = dt.insert(Delaunay::Point(p[0],p[1]));
-        vh->info() = cgalVertices[i].second;
-    }
+    dt.insert(cgalVertices.begin(), cgalVertices.end());
 
     mFaces.clear();
     for(auto iter = dt.finite_faces_begin(); iter != dt.finite_faces_end(); ++iter) {
@@ -183,28 +183,24 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
         fflush(stdout);
     }
 
+    // wrap into the box and sort spatially
     this->wrap_vertices();
-
-    // sort the vertices
-    std::vector<Point_with_idx> cgalVertices;
-    this->sort_vertices(cgalVertices);
+    std::vector<Point_with_idx> cgalVertices = this->sort_vertices();
 
     // compute delaunay
     Delaunay::Iso_rectangle pbox(mBox0[0], mBox0[1], mBox1[0], mBox1[1]);
     Delaunay dt (pbox);
-
-    for(size_t i = 0; i < cgalVertices.size(); i++) {
-        Kernel::Point_3 &p = cgalVertices[i].first;
-        Delaunay::Vertex_handle vh = dt.insert(Delaunay::Point(p[0],p[1]));
-        vh->info() = cgalVertices[i].second;
-    }
+    dt.insert(cgalVertices.begin(), cgalVertices.end());
 
     // store the raw delaunay faces
     this->mDelaunayFaces.clear();
-    std::vector<periodicVertex> delFace (3);
+    std::vector<PeriodicVertex> delFace (3);
 
+    // convert to 3x3 subgrid to handle periodicity
+    // for each delaunay face, see if it has "duplicated" vertices
     dt.convert_to_9_sheeted_covering();
-    for(auto iter = dt.finite_faces_begin(); iter != dt.finite_faces_end(); ++iter) {
+    size_t total_nfaces = 0;
+    for(auto iter = dt.finite_faces_begin(); iter != dt.finite_faces_end(); ++total_nfaces, ++iter) {
 
         // get the type of face (number of original vertex in the face)
         uint8_t num_orig_verts = 0;
@@ -213,21 +209,43 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
             const Delaunay::Vertex_handle &vh = iter->vertex(vid);
             const Delaunay::Offset &off = dt.periodic_point(vh).second;
 
-            const int offx = off[0] == 2 ? -1 : int(off[0]);
-            const int offy = off[1] == 2 ? -1 : int(off[1]);
+            const int8_t offx = off[0] == 2 ? -1 : int8_t(off[0]);
+            const int8_t offy = off[1] == 2 ? -1 : int8_t(off[1]);
 
-            delFace[vid] = periodicVertex(TypeIndex(vh->info()), offx, offy);
-            if (offx == 0 && offy == 0)
+            delFace[vid] = PeriodicVertex(TypeIndex(vh->info()), offx, offy);
+            if (delFace[vid].is_original())
                 num_orig_verts++;
         }
 
         // ignore the ones that are completely outside
-        if (num_orig_verts > 0) {
-            this->mDelaunayFaces.push_back(delFace);
+        if (num_orig_verts == 0) {
+            continue;
         }
+
+        //std::cout << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n";
+
+        // if any two verts are the same (not sure why cgal returns that)
+        if ( delFace[0] == delFace[1] ||
+             delFace[0] == delFace[2] ||
+             delFace[1] == delFace[2]) {
+            // this should not happen after the fix on Apr 18, 2022
+            std::cerr << "> Warning: found a zero edge: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n"
+            continue;
+        }
+
+        if ( delFace[0].origVidx == delFace[1].origVidx ||
+             delFace[0].origVidx == delFace[2].origVidx ||
+             delFace[1].origVidx == delFace[2].origVidx ) {
+            // this should not happen after the fix on Apr 18, 2022
+            std::cout << "> Warning: duplicated original: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n";
+            continue;
+        }
+
+        // finally, we will include this in our triangulation!
+        this->mDelaunayFaces.push_back(delFace);
     }
     if (verbose){
-        std::cout << " Done! created " << mDelaunayFaces.size() << " triangles!\n";
+        std::cout << " Done! created " << mDelaunayFaces.size() << " triangles (out of " << total_nfaces << " periodic ones)!\n";
     }
     trim_periodicDelaunay(verbose);
     return get_faces();

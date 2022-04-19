@@ -25,6 +25,32 @@ For details, see https://github.com/LLNL/MemSurfer.
 class DensityKernel;        // kernel for density estimation
 class DistanceKernel;
 
+
+//! A periodic vertex is stored as an offset (-1,0,1) with respect to the original vertex
+struct PeriodicVertex {
+    TypeIndex origVidx;
+    int8_t offsetx, offsety;
+
+    PeriodicVertex () :
+        origVidx(0), offsetx(0), offsety(0) {}
+
+    PeriodicVertex (const TypeIndex v, const int8_t ox, const int8_t oy)
+        : origVidx(v), offsetx(ox), offsety(oy) {}
+
+    inline bool operator==(const PeriodicVertex &p) const {
+        return origVidx == p.origVidx && offsetx == p.offsetx && offsety == p.offsety;
+    }
+    inline bool is_original() const {
+        return offsetx == 0 and offsety == 0;
+    }
+};
+
+inline
+std::ostream&
+operator<<(std::ostream &os, const PeriodicVertex &p) {
+    return os << "("<<p.origVidx<<" : ["<<int(p.offsetx)<<","<<int(p.offsety)<<"])";
+}
+
 /// ---------------------------------------------------------------------------------------
 //!
 //! \brief This class provides functionality to operate upon a Triangular Mesh
@@ -71,14 +97,11 @@ private:
     bool bbox_valid;
     Vertex mBox0, mBox1;
 
-    //! On addition to the *actual* vertices and faces (i.e., inside the given domain),
+    //! In addition to the *actual* vertices and faces (i.e., inside the given domain),
     //! we need to store extra information
 
-    //! A periodic vertex is stored as an offset (-1,0,1) with respect to the original vertex
-    using periodicVertex = typename std::tuple<TypeIndex, int, int>;
-
     //! Delaunay Faces
-    std::vector<std::vector<periodicVertex> > mDelaunayFaces;
+    std::vector<std::vector<PeriodicVertex> > mDelaunayFaces;
 
     //! The faces that go across the domain (contain original points)
     std::vector<Face> mPeriodicFaces;
@@ -87,7 +110,7 @@ private:
     std::vector<Face> mTrimmedFaces;
 
     //! The duplicate vertices that map to the original
-    std::vector<periodicVertex> mDuplicateVertex_periodic;
+    std::vector<PeriodicVertex> mDuplicateVertex_periodic;
 
     //! The vertices to support duplicate faces
     std::vector<Vertex> mDuplicateVerts;
@@ -181,7 +204,7 @@ private:
     bool set_dimensionality(uint8_t _);
 
     //! sort vertices spatially (using cgal)
-    void sort_vertices(std::vector<Point_with_idx> &svertices) const;
+    std::vector<Point_with_idx> sort_vertices() const;
 
     //! wrap vertices in xy (dim = 2) or in xyz (dim = 3)
     bool wrap_vertices(uint8_t dim = 2);
@@ -308,7 +331,7 @@ public:
         const size_t ndups = mDuplicateVertex_periodic.size();
         std::vector<TypeIndexI> dids (ndups);
         for(size_t i = 0; i < ndups; i++)
-            dids[i] = std::get<0>(mDuplicateVertex_periodic[i]);
+            dids[i] = mDuplicateVertex_periodic[i].origVidx;
         return dids;
     }
 

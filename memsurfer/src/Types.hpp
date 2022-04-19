@@ -53,7 +53,8 @@ typedef Kernel::Point_2     Point2;
 typedef Kernel::Point_3     Point3;
 typedef Kernel::Vector_3    Vector3;
 typedef Kernel::Triangle_3  Triangle3;
-typedef std::pair<Point3, size_t> Point_with_idx;
+typedef std::pair<Point2, size_t> Point_with_idx;
+//typedef std::pair<Point3, size_t> Point_with_idx;
 typedef std::pair<Point3, Vector3> Point_with_normal;
 typedef CGAL::Polyhedron_3<Kernel> Polyhedron;
 
