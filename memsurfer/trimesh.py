@@ -228,6 +228,16 @@ class TriMesh(object):
                         f'created [{self.faces.shape[0]} {self._periodic_faces.shape[0]} {self._trimmed_faces.shape[0]}] faces '
                         f'and [{self.vertices.shape[0]} {self._duplicated_verts.shape[0]}] vertices')
 
+        # check vertex incidence
+        vertex_degree = np.zeros(self.vertices.shape[0], dtype=int)
+        for f in self.faces:
+            vertex_degree[f] += 1
+
+        incorrect = np.where(vertex_degree < 2)[0]
+        if incorrect.shape[0] > 0:
+            LOGGER.warning(f'Found vertices with small incidence: {incorrect} = {vertex_degree[incorrect]}')
+            print (self.vertices[incorrect])
+
     # --------------------------------------------------------------------------
     # computation of attributes!
     # --------------------------------------------------------------------------
@@ -394,10 +404,15 @@ class TriMesh(object):
                     shells[nbr] = 1+shells[current_vertex]
                     vertices_to_process.append(nbr)
 
-        assert shells.min() == 0, 'Failed to assign shell id for some vertices'
+        #assert shells.min() == 0, 'Failed to assign shell id for some vertices'
+        if shells.min() < 0:
+            wrong = np.where(shells < 0)[0]
+            LOGGER.error(f'Failed to assign shell id for {wrong.shape[0]} vertices: '
+                         f'ids = {wrong}, verts = {self.vertices[wrong]}')
+
         self.attributes[key] = shells.astype(int)
         mtimer.end()
-        LOGGER.info(f'{self.tag()} Computed shells for {self.vertices.shape[0]} vertices! took {mtimer}')
+        LOGGER.info(f'{self.tag()} Computed shells for {self.vertices.shape[0]} vertices! took {mtimer} :: {shells.min()}, {shells.max()}')
         return self.attributes[key]
 
     # --------------------------------------------------------------------------
