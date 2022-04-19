@@ -178,13 +178,22 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
     typedef CGAL::Triangulation_data_structure_2<Vb_with_idx, Fb> Tds;
     typedef CGAL::Periodic_2_Delaunay_triangulation_2<dTraits, Tds> Delaunay;
 
+    const size_t nverts = this->mVertices.size();
+
     if (verbose) {
-        std::cout << "   > " << this->tag() << "::periodicDelaunay()...";
+        std::cout << "   > " << this->tag() << "::periodicDelaunay("<<nverts<<")...";
         fflush(stdout);
     }
 
     // wrap into the box and sort spatially
     this->wrap_vertices();
+
+    const std::vector<TypeFunction> distances2 = this->get_pairwise_distances(2);
+    const TypeFunction min_dist = *min_element(distances2.begin(), distances2.end());
+    if (min_dist < 0.000001) {
+        std::cerr << "Warning: Found min distance of " << min_dist << "! Delaunay may miss points!\n";
+    }
+
     std::vector<Point_with_idx> cgalVertices = this->sort_vertices();
 
     // compute delaunay
@@ -197,7 +206,6 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
     std::vector<PeriodicVertex> delFace (3);
 
     // count the degree of vertices to ensure every vertex is connected
-    const size_t nverts = this->mVertices.size();
     std::vector<size_t> vertex_degrees (nverts, 0);
     std::vector<size_t> vertex_degrees_raw (nverts, 0);
 

@@ -199,6 +199,7 @@ private:
     //! -----------------------------------------------------------------------------------
     //! nonstatic private methods
     //! -----------------------------------------------------------------------------------
+    std::vector<TypeFunction> get_pairwise_distances(uint8_t D) const;
 
     //! set dimensionalty of the mesh vertices
     bool set_dimensionality(uint8_t _);

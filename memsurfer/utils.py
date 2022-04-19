@@ -18,6 +18,8 @@ import numpy as np
 import timeit
 import inspect
 import logging
+import scipy.spatial.distance
+
 
 # ------------------------------------------------------------------------------
 # logging utils
@@ -84,6 +86,77 @@ def create_logger(loglevel, logstdout, logfile, logpath, logfname):
     LOGGER.critical('Enabled')
     return LOGGER
 
+
+# ------------------------------------------------------------------------------
+def test_overlapping_points(points, dthreshold = 0.00001, fix = False):
+
+    # --------------------------------------------------------------------------
+    # https://stackoverflow.com/questions/13079563/how-does-condensed-distance-matrix-work-pdist
+    def calc_row_idx(k, n):
+        return int(np.ceil((1 / 2.) * (- (-8 * k + 4 * n ** 2 - 4 * n - 7) ** 0.5 + 2 * n - 1) - 1))
+
+    def elem_in_i_rows(i, n):
+        return i * (n - 1 - i) + (i * (i + 1)) // 2
+
+    def calc_col_idx(k, i, n):
+        return int(n - elem_in_i_rows(i + 1, n) + k)
+
+    def condensed_to_square(k, n):
+        i = calc_row_idx(k, n)
+        j = calc_col_idx(k, i, n)
+        return i, j
+
+    # --------------------------------------------------------------------------
+    LOGGER.debug(f'Testing for overlapping points ({points.shape}, threshold={dthreshold}, fix={fix}')
+
+    pdist = scipy.spatial.distance.pdist(points)
+    is_zero = np.where(pdist < dthreshold)[0]
+    nzero = is_zero.shape[0]
+
+    if nzero == 0:
+        return True
+
+    is_zero = [condensed_to_square(zidx, points.shape[0]) for zidx in is_zero]
+    LOGGER.warning(f'Found {nzero} overlapping points: {is_zero}')
+    if not fix:
+        return False
+
+    # now, try to fix them
+    # we want to move the fewest points possible
+    dupls, dupls_cnts = np.unique([x for sublist in is_zero for x in sublist], return_counts=True)
+    dupls = {dupls[i]: dupls_cnts[i] for i in range(len(dupls))}
+
+    # try to separate each pair
+    max_move = 0.5 * pdist[pdist > dthreshold].min()
+    for x,y in is_zero:
+
+        dist0 = np.linalg.norm(points[x]-points[y])
+
+        # we have moved either of these points before
+        if not np.isclose(dist0, 0.):
+            continue
+        if dupls[x] == -1 or dupls[y] == -1:
+            continue
+
+        # move the one that impacts more points
+        if dupls[x] > dupls[y]:
+            a, b = x, y
+        else:
+            a, b = y, x
+
+        # move a
+        pa = f'{points[a]}'
+
+        rad = np.random.rand() * max_move
+        theta = np.random.rand() * np.pi
+        points[a,0] += rad * np.cos(theta)
+        points[a,1] += rad * np.sin(theta)
+
+        dist1 = np.linalg.norm(points[x] - points[y])
+        LOGGER.debug(f'Moved point {a}: {pa} --> {points[a]} : dist = {dist0} --> {dist1}')
+
+        # mark this as moved
+        dupls[a] = -1
 
 # ------------------------------------------------------------------------------
 # timing utils

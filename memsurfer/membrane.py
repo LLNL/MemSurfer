@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 from pypoisson import poisson_reconstruction
 from . import memsurfer_cmod
 from .trimesh import TriMesh
-from .utils import Timer
+from .utils import Timer, test_overlapping_points
 
 
 # ------------------------------------------------------------------------------
@@ -79,6 +79,9 @@ class Membrane(object):
         self.points = self.points.astype(np.float32)
         self.bbox = self.bbox.astype(np.float32)
         self.pset = memsurfer_cmod.PointSet(self.points)
+
+        # check for overlapping points, but no fix!
+        test_overlapping_points(self.points, fix=False)
 
         # different constructs we will compute
         self.pnormals = None
@@ -191,6 +194,10 @@ class Membrane(object):
 
         # 2. project the points on the surface and 2D plane
         (self.spoints, self.ppoints) = self.surf_poisson.project_on_surface_and_plane(self.points)
+
+        # 2b. handle overlapping points
+        test_overlapping_points(self.spoints, fix=True)
+        test_overlapping_points(self.ppoints, fix=True)
 
         # 3. create a 2D triangulation of the projected points
         self.memb_planar = TriMesh(self.ppoints, periodic=self.periodic, label='memb_planar')

@@ -424,6 +424,37 @@ std::vector<TypeIndexI> TriMesh::need_boundary(bool verbose) {
 }
 #endif
 
+
+//! -----------------------------------------------------------------------------
+//! Compute pairwise distances of ll vertuces
+//! -----------------------------------------------------------------------------
+std::vector<TypeFunction> TriMesh::get_pairwise_distances(uint8_t dim) const {
+
+    if (dim < 1 || dim > this->mDim) {
+        std::ostringstream errMsg;
+        errMsg << " " << this->tag() << "::wrap_vertices("<<int(dim)<<"): Invalid dim specified for " << int(mDim) << "D vertices!" << std::endl;
+        throw std::logic_error(errMsg.str());
+    }
+
+    const size_t nverts = this->mVertices.size();
+    std::vector<TypeFunction> distances;
+    distances.reserve(nverts*nverts/2);
+
+    for (size_t i = 0; i < nverts; i++) {
+    for (size_t j = i+1; j < nverts; j++) {
+
+        TypeFunction dst = 0;
+
+        auto a = this->mVertices[i];
+        auto b = this->mVertices[j];
+        for (size_t d = 0; d < dim; d++) {
+            dst += (a[d]-b[d])*(a[d]-b[d]);
+        }
+        distances.push_back(std::sqrt(dst));
+    }}
+    return distances;
+}
+
 //! -----------------------------------------------------------------------------
 //! Periodic Mesh
 //! -----------------------------------------------------------------------------

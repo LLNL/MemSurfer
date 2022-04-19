@@ -404,11 +404,11 @@ class TriMesh(object):
                     shells[nbr] = 1+shells[current_vertex]
                     vertices_to_process.append(nbr)
 
-        #assert shells.min() == 0, 'Failed to assign shell id for some vertices'
         if shells.min() < 0:
             wrong = np.where(shells < 0)[0]
             LOGGER.error(f'Failed to assign shell id for {wrong.shape[0]} vertices: '
                          f'ids = {wrong}, verts = {self.vertices[wrong]}')
+            assert shells.min() == 0, 'Failed to assign shell id for some vertices'
 
         self.attributes[key] = shells.astype(int)
         mtimer.end()
