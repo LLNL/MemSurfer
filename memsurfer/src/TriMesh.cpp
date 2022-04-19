@@ -189,49 +189,72 @@ void TriMesh::need_pointareas(const std::vector<Face> &faces, const std::vector<
     }
 }
 
-#if 0
 //! -----------------------------------------------------------------------------
 //! compute connectivity
 //! -----------------------------------------------------------------------------
 
 //! Find the direct neighbors of each vertex
-void TriMesh::need_neighbors(bool verbose) {
+std::vector<TypeIndexI> TriMesh::need_neighbors() {
 
-    if (!mVNeighbors.empty())
-        return;
+    const bool verbose = false;
 
-    if (verbose) {
-        std::cout << "   > TriMesh::need_neighbors()...";
-        fflush(stdout);
-    }
-
+    // --------------------------------------------------------------------
     size_t nv = mVertices.size(), nf = mFaces.size();
 
-    std::vector<TypeIndex> numneighbors(nv);
-    for (size_t i = 0; i < nf; i++) {
-        numneighbors[mFaces[i][0]]++;
-        numneighbors[mFaces[i][1]]++;
-        numneighbors[mFaces[i][2]]++;
+    if (mVNeighbors.empty()) {
+
+        if (verbose) {
+            std::cout << "   > TriMesh::need_neighbors()...";
+            fflush(stdout);
+        }
+
+        std::vector<TypeIndex> numneighbors(nv, 0);
+        for (size_t i = 0; i < nf; i++) {
+            numneighbors[mFaces[i][0]]++;
+            numneighbors[mFaces[i][1]]++;
+            numneighbors[mFaces[i][2]]++;
+        }
+
+
+        mVNeighbors.resize(nv);
+        for (size_t i = 0; i < nv; i++) {
+            mVNeighbors[i].reserve(numneighbors[i]);
+            //mVNeighbors[i].reserve(mVNumNeighbors[i]+2); // Slop for boundaries
+        }
+
+        for (size_t i = 0; i < nf; i++) {
+        for (size_t j = 0; j < 3; j++) {
+            std::vector<TypeIndex> &me = mVNeighbors[mFaces[i][j]];
+            TypeIndex n1 = mFaces[i][(j+1)%3];
+            TypeIndex n2 = mFaces[i][(j+2)%3];
+            if (std::find(me.begin(), me.end(), n1) == me.end())    me.push_back(n1);
+            if (std::find(me.begin(), me.end(), n2) == me.end())    me.push_back(n2);
+        }
+        }
+
+        if(verbose)
+            std::cout << " Done!\n";
     }
 
-    mVNeighbors.resize(nv);
-    for (size_t i = 0; i < nv; i++)
-        mVNeighbors[i].reserve(numneighbors[i]+2); // Slop for boundaries
+    // --------------------------------------------------------------------
+    // now linearize the data
+    std::vector<TypeIndexI> linearized_retval;
 
-    for (size_t i = 0; i < nf; i++) {
-    for (size_t j = 0; j < 3; j++) {
-        std::vector<TypeIndex> &me = mVNeighbors[mFaces[i][j]];
-        TypeIndex n1 = mFaces[i][(j+1)%3];
-        TypeIndex n2 = mFaces[i][(j+2)%3];
-        if (std::find(me.begin(), me.end(), n1) == me.end())    me.push_back(n1);
-        if (std::find(me.begin(), me.end(), n2) == me.end())    me.push_back(n2);
-    }
-    }
+    // first nv values will store the number of neighbors for each vertex!
+        // we are not using numneighbors because they are approximate!
+        // the counts can be wrong for boundary!
+    linearized_retval.resize(nv, 0);
 
-    if(verbose)
-        std::cout << " Done!\n";
+    for(size_t vidx = 0; vidx < nv; ++vidx) {
+
+        const std::vector<TypeIndex> &vnbrs = mVNeighbors[vidx];
+        linearized_retval[vidx] = vnbrs.size();
+        std::copy(vnbrs.begin(), vnbrs.end(), std::back_inserter(linearized_retval));
+    }
+    return linearized_retval;
 }
 
+#if 0
 //! Find the faces touching each vertex
 void TriMesh::need_adjacentfaces(bool verbose) {
 

@@ -13,11 +13,10 @@ Python API that may be easily used/extended to perform other types of analysis.
 
 ### Dependencies
 
-The interface to MemSurfer is provided via `python 3.7`, whereas the core functionality is written in `C++ 11` with the following dependencies.
+The interface to MemSurfer is provided via `python 3`, whereas the core functionality is written in `C++ 11` with the following dependencies.
   1. [The Computational Geometry Algorithms Library (CGAL)](https://www.cgal.org/ "CGAL"): `v 4.13.0`
-  2. [Visualization Toolkit (VTK)](https://www.vtk.org/ "VTK"): `v 8.1.2`
-  3. [boost](https://www.boost.org/): `v 1.66`
-  4. [Eigen](http://eigen.tuxfamily.org/index.php): `v 3.3.9`
+  2. [boost](https://www.boost.org/): `v 1.66`
+  3. [Eigen](http://eigen.tuxfamily.org/index.php): `v 3.3.9`
 
 Installing MemSurfer and its dependencies additionally require the following software.
 
@@ -59,11 +58,11 @@ $ MEM_HOME=`pwd`/MemSurfer
 
 #### 1. Installing MemSurfer's Dependencies
 
-The following describes the installation of `cgal`, `vtk`, `boost` and `eigen`,
+The following describes the installation of `cgal`,, `boost` and `eigen`,
 whereas the rest of the dependencies are assumed to be standard and available.
 
 
-##### 1a. Eigen, Boost, CGAL, and VTK (on mac)
+##### 1a. Eigen, Boost, and CGAL (on mac)
 On `macosx`, the simplest way to install these is using [`macports`](macports.org). As of Jan 2019, `macports` installs the correct versions.
 ```
 $ port install vtk+python
@@ -140,6 +139,11 @@ This error means that your ssh keys are not registered with github. Please see [
 * See the `example` directory.
 
 ### Change Log
+
+##### Dec 06, 2021
+
+* Removed VTK as a C++ dependency by using it directly in python. Sufficient now to install using `pip install vtk`.
+* Updated examples to MDAnalysis 2
 
 ##### Jul 22, 2021
 

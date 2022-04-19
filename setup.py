@@ -87,7 +87,7 @@ def check_dependencies(packages):
 
 def fetch_paths(default):
     # look for the paths of these packages
-    packages = ['vtk', 'cgal', 'eigen', 'boost']
+    packages = ['cgal', 'eigen', 'boost']
 
     # now, create a dictionary of all paths
     paths = {}
@@ -101,12 +101,8 @@ def fetch_paths(default):
         print(f'  > {kr} = ({p})')
         paths[k] = {'root': p, 'include': os.path.join(p, 'include')}
 
-    # now, update the include paths
-    paths['vtk'].update(include=os.path.join(paths['vtk']['include'], 'vtk-8.1'))
+    # now, update the include and lib paths
     paths['eigen'].update(include=os.path.join(paths['eigen']['include'], 'eigen3'))
-
-    # now, add the lib paths where needed
-    paths['vtk'].update({'lib': os.path.join(paths['vtk']['root'], 'lib')})
     paths['cgal'].update({'lib': find_shlib_path(paths['cgal']['root'], 'libCGAL')})
 
     # make sure these paths exist!
@@ -165,10 +161,7 @@ if __name__ == '__main__':
 
     # external libs
     extn = shlib_extn()
-    LIBS_VTK = glob.glob(os.path.join(PATHS['vtk']['lib'], f'libvtk*.{extn}'))
-    LIBS_CGAL = glob.glob(os.path.join(PATHS['cgal']['lib'], f'libCGAL*.{extn}'))
-    LIBS_EXT = LIBS_VTK + LIBS_CGAL
-
+    LIBS_EXT = glob.glob(os.path.join(PATHS['cgal']['lib'], f'libCGAL*.{extn}'))
     LIBS_EXT = [os.path.basename(l) for l in LIBS_EXT]
     LIBS_EXT = [os.path.splitext(l)[0] for l in LIBS_EXT]
     LIBS_EXT = [l[3:] for l in LIBS_EXT]
@@ -212,7 +205,7 @@ if __name__ == '__main__':
     # cpp code
     PATH_PM = os.path.join(PATH_MEM, 'memsurfer')
     SRC_MEM = ['memsurfer.i', 'src/PointSet.cpp', 'src/TriMesh.cpp',
-               'src/TriMesh_cgal.cpp', 'src/TriMesh_kde.cpp', 'src/TriMesh_vtk.cpp']
+               'src/TriMesh_cgal.cpp', 'src/TriMesh_kde.cpp']
     SRC_MEM = [os.path.join(PATH_PM, f) for f in SRC_MEM]
     PATH_PM = os.path.join(PATH_PM, 'src')
 
@@ -221,7 +214,7 @@ if __name__ == '__main__':
     # prepending with "memsurfer" puts this in the memsurfer namespace
     EXT_MEM = Extension('memsurfer._memsurfer_cmod', language='c++',
                         swig_opts=['-c++', '-I' + PATH_PM],
-                        define_macros=[('VTK_AVAILABLE', 1), ('CGAL_AVAILABLE', 1)],
+                        define_macros=[('CGAL_AVAILABLE', 1)],
                         extra_compile_args=['-std=c++11',
                                             '-Wno-parentheses',
                                             '-Wno-uninitialized',
@@ -236,11 +229,10 @@ if __name__ == '__main__':
                                       PATHS['boost']['include'],
                                       PATHS['eigen']['include'],
                                       PATHS['cgal']['include'],
-                                      PATHS['vtk']['include'],
                                       '/opt/local/include'
                                       ],
                         libraries=LIBS_EXT,
-                        library_dirs=[PATHS['vtk']['lib'], PATHS['cgal']['lib']],
+                        library_dirs=[PATHS['cgal']['lib']],
                         )
 
     # --------------------------------------------------------------------------
@@ -254,9 +246,11 @@ if __name__ == '__main__':
           description='Python tool to compute bilayer membranes.',
           license='GPL 3',
 
+          install_requires=['numpy>=1.20', 'vtk>=9.1'],
           packages=find_packages(),
           ext_modules=cythonize([EXT_PP, EXT_MEM]),
           cmdclass={'build_py': CustomBuildPy, 'build_ext': CustomBuildExt}
           )
+
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------

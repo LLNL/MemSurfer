@@ -3,10 +3,9 @@
 # ------------------------------------------------------------------------------
 # parameters to control this script!
 
-INSTALL_VTK=true
-INSTALL_CGAL=false
-INSTALL_BOOST=false
-INSTALL_EIGEN=false
+INSTALL_CGAL=true
+INSTALL_BOOST=true
+INSTALL_EIGEN=true
 NPROCS=20
 
 
@@ -51,7 +50,7 @@ if [ -z "${CXX_COMPILER}" ] ; then
 fi
 export CC=${CC_COMPILER}
 export CXX=${CXX_COMPILER}
-export PYTHON=`which python`
+export PYTHON=`which python3`
 
 
 command -v "${CC}" >/dev/null 2>&1 || { echo >&2 "Cannot find C compiler '${CC}'. Aborting."; exit 1;  }
@@ -225,65 +224,6 @@ if [ "$INSTALL_CGAL" = true ] ; then
       echo "    ($NAME) Building and Installing"
       make -j$NPROCS > $PATH_Ext/$NAME.make-$ts.log 2>&1
       make install -j$NPROCS > $PATH_Ext/$NAME.make-$ts.log 2>&1
-
-      # test the installation
-      if [ -f ${TEST_FILE1} -o -f ${TEST_FILE2} ]; then
-        echo "    ($NAME) Successfully installed at ($PATH_Ext)."
-      else
-        echo "    ($NAME) Installation failed. Please see build logs in ($PATH_Ext) for more information."
-      fi
-      popd > /dev/null
-    fi
-fi
-
-
-# ------------------------------------------------------------------------------
-# VTK 8.1.2
-# ------------------------------------------------------------------------------
-if [ "$INSTALL_VTK" = true ] ; then
-
-    VERSION='8.1'
-    NAME='VTK-8.1.2'
-    FILE='VTK-8.1.2.tar.gz'
-    URL="https://www.vtk.org/files/release/$VERSION/$FILE"
-    TEST_FILE1="$PATH_Ext/lib/libvtkCommonCore-$VERSION$shlib_extn"
-    TEST_FILE2="$PATH_Ext/lib64/libvtkCommonCore-$VERSION$shlib_extn"
-
-    if [ -f $TEST_FILE1 ]; then
-      echo "    ($NAME) Already installed. Found ($TEST_FILE1)."
-    elif [ -f $TEST_FILE2 ]; then
-      echo "    ($NAME) Already installed. Found ($TEST_FILE2)."
-    else
-      rm $PATH_Ext/$NAME.*.log 2>/dev/null
-      _fetch $NAME $URL $PATH_Ext/$NAME.download.log
-
-      BUILD_PATH=$dirname/build-$(date "+%Y%m%d-%H%M%S")
-      mkdir -p $BUILD_PATH
-      pushd $BUILD_PATH > /dev/null
-      echo "    ($NAME) Configuring (`pwd`)"
-
-      cmake -DCMAKE_C_COMPILER=${CC_COMPILER} \
-            -DCMAKE_CXX_COMPILER=${CXX_COMPILER} \
-            -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
-            -DCMAKE_BUILD_TYPE:STRING=Release \
-            -DCMAKE_INSTALL_PREFIX:STRING=$PATH_Ext \
-            -DCMAKE_CXX_FLAGS:STRING="-Wno-inconsistent-missing-override -Wno-deprecated-declarations -Wno-dev -Wno-unknown-warning-option" \
-            -DBUILD_SHARED_LIBS:BOOL=ON \
-            -DPYTHON_EXECUTABLE=$PYTHON \
-            -DVTK_PYTHON_VERSION=3 \
-            -DVTK_WRAP_PYTHON:BOOL=ON \
-            -DVTK_Group_Rendering:BOOL=OFF \
-            -DVTK_Group_StandAlone:BOOL=OFF \
-            -DModule_vtkCommonDataModel:BOOL=ON \
-            -DModule_vtkFiltersGeneral:BOOL=ON \
-            -DModule_vtkFiltersSources:BOOL=ON \
-            -DModule_vtkIOXML:BOOL=ON \
-            .. > $PATH_Ext/$NAME.cmake.log 2>&1
-
-      # common functionality to build and install
-      echo "    ($NAME) Building and Installing"
-      make -j$NPROCS > $PATH_Ext/$NAME.make.log 2>&1
-      make install -j$NPROCS > $PATH_Ext/$NAME.make.log 2>&1
 
       # test the installation
       if [ -f ${TEST_FILE1} -o -f ${TEST_FILE2} ]; then
