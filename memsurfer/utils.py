@@ -107,7 +107,7 @@ def test_overlapping_points(points, dthreshold = 0.00001, fix = False):
         return i, j
 
     # --------------------------------------------------------------------------
-    LOGGER.debug(f'Testing for overlapping points ({points.shape}, threshold={dthreshold}, fix={fix}')
+    LOGGER.debug(f'Testing for overlapping points ({points.shape}, threshold={dthreshold}, fix={fix})')
 
     pdist = scipy.spatial.distance.pdist(points)
     is_zero = np.where(pdist < dthreshold)[0]

@@ -1,28 +1,31 @@
-## MemSurfer, Version 1.0.1
-#### Released: July 22, 2021
+## MemSurfer, Version 1.1
+#### Released: April 19, 2022
 
 ##### Author: Harsh Bhatia (hbhatia@llnl.gov) and Peer-Timo Bremer
 
-MemSurfer is an efficient and versatile tool to compute and analyze membrane surfaces found in a wide
-variety of large-scale molecular simulations. MemSurfer works independent of the
-type of simulation, directly on the 3D point coordinates, and can handle a variety of membranes as well as
-atomic simulations. MemSurfer provides many in-built analysis
-tasks, such as computing the membrane curvature, density and normals of lipids,
-and area per lipid. More importantly, MemSurfer provides a simple-to-use
-Python API that may be easily used/extended to perform other types of analysis.
+MemSurfer is an efficient and versatile tool to compute and analyze membrane
+surfaces found in a wide variety of large-scale molecular simulations.
+MemSurfer works independent of the type of simulation, directly on the 3D point
+coordinates, and can handle a variety of membranes as well as atomic
+simulations. MemSurfer provides many in-built analysis tasks, such as computing
+the membrane curvature, density and normals of lipids, and area per lipid. More
+importantly, MemSurfer provides a simple-to-use Python API that may be easily
+used/extended to perform other types of analysis.
 
 ### Dependencies
 
-The interface to MemSurfer is provided via `python 3`, whereas the core functionality is written in `C++ 11` with the following dependencies.
+The interface to MemSurfer is provided via `python 3`, whereas the core
+functionality is written in `C++ 11` with the following dependencies.
   1. [The Computational Geometry Algorithms Library (CGAL)](https://www.cgal.org/ "CGAL"): `v 4.13.0`
   2. [boost](https://www.boost.org/): `v 1.66`
   3. [Eigen](http://eigen.tuxfamily.org/index.php): `v 3.3.9`
 
 Installing MemSurfer and its dependencies additionally require the following software.
 
-  - `C++` compiler that supports `C++ 11` and [OpenMP](https://www.openmp.org/) (tested with `GNU gcc 7.3.0` and `GNU gcc 7.5.0`)
+  - `C++` compiler that supports `C++ 11` and [OpenMP](https://www.openmp.org/)
+  (tested with `GNU gcc 7.3.0` and `GNU gcc 7.5.0`)
     - **Please use `gcc@7`. See known issues below.**
-  - `Python 3` interpreter (tested with `3.7.2` and `3.7.11`)
+  - `Python 3` interpreter (tested with `3.9.12`, `3.7.11`, and `3.7.2`)
   - [Cython](https://cython.org/) (tested with `0.29.10` and  `0.29.24`)
   - [Swig](http://www.swig.org/) (tested with `3.0.12` and `4.0.2`)
   - [CMake](https://cmake.org/) (tested with `3.13` and `3.20`)
@@ -40,12 +43,13 @@ the installation of these major dependencies.
 
 ### Installation via Spack
 
-MemSurfer is available via [spack](https://spack.io) -- a package manager for HPC. Please
+Currently outdated and broken. To be fixed soon.
+<!-- MemSurfer is available via [spack](https://spack.io) -- a package manager for HPC. Please
 download spack (see instructions provded by `spack`). Once installed,
 please do the following
 ```
 $ spack install memsurfer@1.0.1 ^python@3.7.3 %gcc@7.3.0
-```
+``` -->
 
 
 ### Installation from source
@@ -63,14 +67,13 @@ whereas the rest of the dependencies are assumed to be standard and available.
 
 
 ##### 1a. Eigen, Boost, and CGAL (on mac)
-On `macosx`, the simplest way to install these is using [`macports`](macports.org). As of Jan 2019, `macports` installs the correct versions.
+On `macosx`, the simplest way to install these is using [`macports`](macports.org).
+As of Jan 2019, `macports` installs the correct versions.
 ```
-$ port install vtk+python
 $ port install cgal           # also installs boost and eigen
 ```
 
-##### 1b. Eigen, Boost, CGAL, and VTK (from source)
-
+##### 1b. Eigen, Boost, and CGAL (from source)
 
 A helper script `$MEM_HOME/install_deps.sh` is provided to install these dependencies.
 In order to use this script, you need to specify a `C++` compiler that supports `OpenMP`.
@@ -83,12 +86,12 @@ $ sh install_deps.sh
 
 This script installs all these dependencies in a folder called `$MEM_HOME/external`.
 Note that you may not need to install all four of these dependencies. Please
-edit the script (lines 6--9) to select which ones to install.
+edit the script (lines 6--8) to select which ones to install.
 
 Once installed successfully, please add the following to your shell profile to
 access these dependencies.
 ```
-$ export PYTHONPATH=$MEM_HOME/external/lib/python3.7/site-packages:$PYTHONPATH
+$ export PYTHONPATH=$MEM_HOME/external/lib/python3.x/site-packages:$PYTHONPATH
 
 # LD_LIBRARY_PATH for linux
 $ export LD_LIBRARY_PATH=$MEM_HOME/external/lib:$MEM_HOME/external/lib64:$LD_LIBRARY_PATH
@@ -104,7 +107,6 @@ using `distutils`. However, you need to explicitly supply the path of the extern
 dependencies.
 ```
 $ export BOOST_ROOT=<path_to_boost>   # boost headers are contained in $BOOST_ROOT/include/boost
-$ export VTK_ROOT=<path_to_vtk>       # vtk headers are contained in $VTK_ROOT/include/vtk-8.1
 $ export CGAL_ROOT=<path_to_cgal>     # cgal headers are contained in $CGAL_ROOT/include/CGAL
 $ export EIGEN_ROOT=<path_to_eigen>   # eigen headers are contained in $EIGEN_ROOT/include/eigen3
 ```
@@ -131,7 +133,10 @@ Cloning into '<your-path>/MemSurfer/pypoisson'...
 git@github.com: Permission denied (publickey).
 fatal: Could not read from remote repository.
 ```
-This error means that your ssh keys are not registered with github. Please see [here](https://help.github.com/en/articles/connecting-to-github-with-ssh) and [here](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account) to register your ssh key and retry.
+This error means that your ssh keys are not registered with github. Please see
+[here](https://help.github.com/en/articles/connecting-to-github-with-ssh) and
+[here](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account)
+to register your ssh key and retry.
 
 
 ### Examples
@@ -140,10 +145,19 @@ This error means that your ssh keys are not registered with github. Please see [
 
 ### Change Log
 
+##### Apr 19, 2022
+
+* Bumped the version.
+* Bug fix in Delaunay.
+* Added perturbations in projected points for correct Delaunay.
+* Added shell analysis.
+* Added conversion of mesh properties to pandas (to support writing to csv).
+
 ##### Dec 06, 2021
 
-* Removed VTK as a C++ dependency by using it directly in python. Sufficient now to install using `pip install vtk`.
-* Updated examples to MDAnalysis 2
+* Removed VTK as a C++ dependency by using it directly in python. Sufficient now
+ to install using `pip install vtk`.
+* Updated examples to MDAnalysis 2.
 
 ##### Jul 22, 2021
 
