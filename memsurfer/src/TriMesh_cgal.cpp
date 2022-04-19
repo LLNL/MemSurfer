@@ -196,6 +196,11 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
     this->mDelaunayFaces.clear();
     std::vector<PeriodicVertex> delFace (3);
 
+    // count the degree of vertices to ensure every vertex is connected
+    const size_t nverts = this->mVertices.size();
+    std::vector<size_t> vertex_degrees (nverts, 0);
+    std::vector<size_t> vertex_degrees_raw (nverts, 0);
+
     // convert to 3x3 subgrid to handle periodicity
     // for each delaunay face, see if it has "duplicated" vertices
     dt.convert_to_9_sheeted_covering();
@@ -209,12 +214,15 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
             const Delaunay::Vertex_handle &vh = iter->vertex(vid);
             const Delaunay::Offset &off = dt.periodic_point(vh).second;
 
+            const TypeIndex vidx = TypeIndex(vh->info());
             const int8_t offx = off[0] == 2 ? -1 : int8_t(off[0]);
             const int8_t offy = off[1] == 2 ? -1 : int8_t(off[1]);
 
-            delFace[vid] = PeriodicVertex(TypeIndex(vh->info()), offx, offy);
+            delFace[vid] = PeriodicVertex(vidx, offx, offy);
             if (delFace[vid].is_original())
                 num_orig_verts++;
+
+            vertex_degrees_raw[vidx] += 1;
         }
 
         // ignore the ones that are completely outside
@@ -222,14 +230,12 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
             continue;
         }
 
-        //std::cout << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n";
-
         // if any two verts are the same (not sure why cgal returns that)
         if ( delFace[0] == delFace[1] ||
              delFace[0] == delFace[2] ||
              delFace[1] == delFace[2]) {
             // this should not happen after the fix on Apr 18, 2022
-            std::cerr << "> Warning: found a zero edge: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n"
+            std::cerr << "> Warning: found a zero edge: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n";
             continue;
         }
 
@@ -241,12 +247,26 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
             continue;
         }
 
+        for(uint8_t vid = 0; vid < 3; vid++){
+            vertex_degrees[delFace[vid].origVidx] += 1;
+        }
+
         // finally, we will include this in our triangulation!
         this->mDelaunayFaces.push_back(delFace);
     }
     if (verbose){
         std::cout << " Done! created " << mDelaunayFaces.size() << " triangles (out of " << total_nfaces << " periodic ones)!\n";
     }
+
+    // problematic vertices:
+    // with degree 0 (disconnected) or 1 (connectd via a line)
+    for(size_t i = 0; i < nverts; i++) {
+        if (vertex_degrees[i] < 2 || vertex_degrees_raw[i] < 2) {
+            std::cerr << "> Warning: found a vertex with low incidence: "
+                      << "vertex[" << i << "] = " << this->mVertices[i] << ", incidence = (" << vertex_degrees[i] << ", raw = " << vertex_degrees_raw[i] << ")\n";
+         }
+    }
+
     trim_periodicDelaunay(verbose);
     return get_faces();
 #endif
