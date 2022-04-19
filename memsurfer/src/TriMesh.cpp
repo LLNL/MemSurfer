@@ -426,7 +426,6 @@ bool TriMesh::wrap_vertices(uint8_t dim) {
     const Vertex boxw = this->mBox1 - this->mBox0;
 
     const size_t nverts = mVertices.size();
-    std::cout << " wrapping " << nverts << " vertices!\n";
     for(size_t i=0; i<nverts; i++) {
     for(uint8_t d=0; d<dim; d++) {
         TypeFunction &x = mVertices[i][d];

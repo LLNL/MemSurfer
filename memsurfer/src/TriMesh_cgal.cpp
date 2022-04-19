@@ -229,7 +229,7 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
              delFace[0] == delFace[2] ||
              delFace[1] == delFace[2]) {
             // this should not happen after the fix on Apr 18, 2022
-            std::cerr << "Warning: found a zero edge: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n";
+            std::cerr << "> Warning: found a zero edge: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n"
             continue;
         }
 
@@ -237,7 +237,7 @@ std::vector<TypeIndexI> TriMesh::periodicDelaunay(bool verbose) {
              delFace[0].origVidx == delFace[2].origVidx ||
              delFace[1].origVidx == delFace[2].origVidx ) {
             // this should not happen after the fix on Apr 18, 2022
-            std::cout << "Warning: duplicated original: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n";
+            std::cout << "> Warning: duplicated original: " << total_nfaces << " = [[" << delFace[0] << "," << delFace[1] << "," << delFace[2] << "]]\n";
             continue;
         }
 

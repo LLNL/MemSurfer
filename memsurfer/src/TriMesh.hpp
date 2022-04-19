@@ -43,10 +43,6 @@ struct PeriodicVertex {
     inline bool is_original() const {
         return offsetx == 0 and offsety == 0;
     }
-
-    /*inline bool is_sameOriginal(const PeriodicVertex &p) const {
-        return origVidx == p.origVidx;
-    }*/
 };
 
 inline
