@@ -598,7 +598,8 @@ class TriMesh(object):
                     df[f'{_name}_{dims[d]}'] = _data[:, d]
 
             else:
-                LOGGER.warning(f'Could not add "{_name}" with size {_data.shape}')
+                LOGGER.warning(f'Could not add "{_name}" with size {_data.shape}'
+                               f'with vertices {self.vertices.shape}')
 
         # ----------------------------------------------------------------------
         _add_to_dataframe('pos', self.vertices)
