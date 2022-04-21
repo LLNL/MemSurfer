@@ -158,6 +158,51 @@ def test_overlapping_points(points, dthreshold = 0.00001, fix = False):
         # mark this as moved
         dupls[a] = -1
 
+
+# ------------------------------------------------------------------------------
+def get_order_param(a2,a3, b2,b3, z=np.array([0,0,1])):
+    """Get lipid "order" parameter
+    # (a2, a3) are the second and third beads in tail a
+    # (b2, b3) are the second and third beads in tail b
+    # z represents the normal at the head
+
+    # P = 0.5 * (3*cos^2(theta) - 1) order param at pos3 and average over tails
+    #    where "theta" is the angle between the bond and the bilayer normal.
+    #    P2 = 1      perfect alignment with the bilayer normal
+    #    P2 = -0.5   anti-alignment
+    #    P2 = 0      random orientation
+
+    # returns (n,2) array with a column for each tail
+    """
+
+    if z.ndim == 1:
+        z = np.array([z])
+
+    LOGGER.info(f'Computing order parameter'
+                f'({a2.shape}, {a3.shape}, {b2.shape}, {b3.shape}; {z.shape})')
+
+    assert a2.shape == a3.shape and \
+           a2.shape == b2.shape and \
+           a2.shape == b3.shape, f'Tail\'s shapes must match'
+
+    assert z.shape == (1,3) or z.shape == a2.shape, \
+        'Should provide a single normal or a normal per lipid'
+
+    # compute the norm of z once
+    norm_z = np.linalg.norm(z, axis=1)
+
+    # smaller function that implements the formula for order parameter
+    def _compute(dx):
+        dx_dot_z = np.einsum('ij, ij->i', dx, z)
+        costht = dx_dot_z / (np.linalg.norm(dx, axis=1) * norm_z)
+        return 0.5 * (3.0 * costht * costht - 1)
+
+    # compute for both vectors
+    orda = _compute(a2-a3)
+    ordb = _compute(b2-b3)
+    return np.swapaxes(np.vstack((orda, ordb)), 0,1)
+
+
 # ------------------------------------------------------------------------------
 # timing utils
 # ------------------------------------------------------------------------------
